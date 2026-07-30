@@ -1,23 +1,34 @@
 export default {
   async fetch(request, env) {
-    const result = await env.DB.prepare("SELECT 1 AS ok").first();
+    const url = new URL(request.url);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        bot: env.BOT_NAME,
-        timezone: env.TIMEZONE,
-        database: result
-      }),
-      {
-        headers: {
-          "Content-Type": "application/json"
+    if (request.method === "POST") {
+      const update = await request.json();
+
+      if (update.message) {
+        const chatId = update.message.chat.id;
+        const text = update.message.text || "";
+
+        if (text === "/start") {
+          await fetch(
+            `https://api.telegram.org/bot${env.BOT_TOKEN}/sendMessage`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                chat_id: chatId,
+                text: "👋 Welcome to New Zealand 2D Ledger Bot!"
+              })
+            }
+          );
         }
       }
-    );
-  },
 
-  async scheduled(event, env, ctx) {
-    console.log("Cron job executed");
+      return new Response("OK");
+    }
+
+    return new Response("New Zealand 2D Ledger Bot is running!");
   }
 };

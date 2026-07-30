@@ -1,0 +1,32 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+
+  "name": "newzealand-2d-ledger-bot",
+
+  "main": "src/index.js",
+
+  "compatibility_date": "2026-07-31",
+
+  "observability": {
+    "enabled": true
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "newzealand-2d-ledger-db",
+      "database_id": "ace122c8-f0a6-4b9b-8cd5-692c466f4fc3"
+    }
+  ],
+
+  "vars": {
+    "BOT_NAME": "New Zealand 2D Ledger Bot",
+    "TIMEZONE": "Asia/Yangon"
+  },
+
+  "triggers": {
+    "crons": [
+      "* * * * *"
+    ]
+  }
+}

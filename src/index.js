@@ -8,6 +8,7 @@ import {
 import { hasAccess } from "./license.js";
 
 import {
+  isAdminUser,
   approveUser,
   banUser,
   listUsers
@@ -370,7 +371,75 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
 
           return new Response("OK");
         }
+/*
+ * ==========================
+ * ADMIN COMMAND - /unban
+ * ==========================
+ */
+if (text.startsWith("/unban")) {
+  if (!admin) {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "⛔ ဤ Command ကို Admin သာ အသုံးပြုနိုင်ပါသည်။"
+    );
+    return new Response("OK");
+  }
 
+  const args = text.split(/\s+/);
+
+  if (args.length !== 2) {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+`အသုံးပြုပုံ
+
+/unban CHAT_ID
+
+ဥပမာ
+/unban 123456789`
+    );
+    return new Response("OK");
+  }
+
+  const targetId = Number(args[1]);
+
+  const targetUser = await getUser(env.DB, targetId);
+
+  if (!targetUser) {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "❌ User မတွေ့ပါ"
+    );
+    return new Response("OK");
+  }
+
+  await approveUser(
+    env.DB,
+    targetId,
+    "Free",
+    "2099-12-31T23:59:59.000Z"
+  );
+
+  await sendMessage(
+    env.BOT_TOKEN,
+    chatId,
+`✅ User ကို Unban လုပ်ပြီးပါပြီ
+
+🆔 Chat ID : ${targetId}`
+  );
+
+  try {
+    await sendMessage(
+      env.BOT_TOKEN,
+      targetId,
+      "✅ Admin မှ သင့် Account ကို ပြန်ဖွင့်ပေးလိုက်ပါပြီ။"
+    );
+  } catch (e) {}
+
+  return new Response("OK");
+      }
         /*
          * =========================================
          * START COMMAND

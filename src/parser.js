@@ -23,8 +23,8 @@ export function parseBetMessage(text) {
   let numbers = [];
 
   // Reverse Rule
-  if (/[Rr®]$/.test(number)) {
-    number = number.slice(0, -1);
+  if (/[Rr®Ⓡ]$/.test(number)) {
+    number = number.replace(/[Rr®Ⓡ]$/, "");
     numbers = expandReverse([number]);
   } else {
     numbers = [number];

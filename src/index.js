@@ -8,35 +8,43 @@ import {
 import { hasAccess } from "./license.js";
 
 import {
-  isAdmin,
   approveUser,
   banUser,
   listUsers
 } from "./admin.js";
 
+/*
+ * Admin Telegram User ID
+ * Cloudflare ADMIN_ID မရခဲ့ရင်လည်း ဒီ ID ကို အသုံးပြုမယ်။
+ */
+const DEFAULT_ADMIN_ID = 8840114917;
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    // Health Check
-    if (request.method === "GET" && url.pathname === "/") {
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          bot: env.BOT_NAME,
-          status: "running",
-          version: "2.0.0"
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json"
-          }
-        }
-      );
+    /*
+     * Health Check
+     */
+    if (
+      request.method === "GET" &&
+      url.pathname === "/"
+    ) {
+      return jsonResponse({
+        ok: true,
+        bot: env.BOT_NAME || "New Zealand 2D Ledger Bot",
+        status: "running",
+        version: "2.0.0"
+      });
     }
 
-    // Telegram Webhook
-    if (request.method === "POST" && url.pathname === "/webhook") {
+    /*
+     * Telegram Webhook
+     */
+    if (
+      request.method === "POST" &&
+      url.pathname === "/webhook"
+    ) {
       try {
         const update = await request.json();
 
@@ -44,21 +52,33 @@ export default {
           return new Response("OK");
         }
 
-        const chatId = update.message.chat.id;
-        const text = String(update.message.text || "").trim();
-        const from = update.message.from || {};
+        const message = update.message;
+        const chatId = message.chat.id;
+        const from = message.from || {};
+        const userId = from.id || chatId;
 
-        if (!text) {
+        const originalText = String(
+          message.text || ""
+        ).trim();
+
+        if (!originalText) {
           return new Response("OK");
         }
 
         /*
-         * ADMIN COMMANDS
-         * Admin Command တွေကို အရင်စစ်ရမယ်
+         * /command@BotUsername ပုံစံကိုလည်း
+         * /command ပုံစံအဖြစ် ပြောင်းမယ်။
          */
+        const text = normalizeCommand(originalText);
+        const admin = isAdminUser(userId, env);
 
+        /*
+         * =========================================
+         * ADMIN COMMAND — /users
+         * =========================================
+         */
         if (text === "/users") {
-          if (!isAdmin(chatId, env)) {
+          if (!admin) {
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
@@ -80,34 +100,48 @@ export default {
             return new Response("OK");
           }
 
-          let message = "👥 USERS LIST\n\n";
+          let report = "👥 USERS LIST\n\n";
 
           for (const user of users) {
-            const username = user.username
-              ? `@${user.username}`
-              : "မရှိ";
-
-            message +=
-              `👤 ${user.first_name || "အမည်မရှိ"}\n` +
-              `🆔 ${user.chat_id}\n` +
-              `📛 ${username}\n` +
-              `📌 Status : ${user.status}\n` +
-              `💎 Plan : ${user.plan}\n` +
-              `📅 Expire : ${user.expires_at || "မရှိ"}\n` +
-              `━━━━━━━━━━━━━━\n`;
+            report +=
+              `👤 အမည် : ${user.first_name || "မရှိ"}\n` +
+              `🆔 Chat ID : ${user.chat_id}\n` +
+              `📛 Username : ${
+                user.username
+                  ? `@${user.username}`
+                  : "မရှိ"
+              }\n` +
+              `📌 Status : ${user.status || "pending"}\n` +
+              `💎 Plan : ${user.plan || "none"}\n` +
+              `📅 Expire : ${
+                user.expires_at
+                  ? formatDate(user.expires_at)
+                  : "မရှိ"
+              }\n` +
+              `━━━━━━━━━━━━━━━━━━\n`;
           }
 
           await sendLongMessage(
             env.BOT_TOKEN,
             chatId,
-            message
+            report
           );
 
           return new Response("OK");
         }
 
+        /*
+         * =========================================
+         * ADMIN COMMAND — /approve
+         *
+         * /approve CHAT_ID 30
+         * /approve CHAT_ID 90
+         * /approve CHAT_ID 365
+         * /approve CHAT_ID forever
+         * =========================================
+         */
         if (text.startsWith("/approve")) {
-          if (!isAdmin(chatId, env)) {
+          if (!admin) {
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
@@ -128,36 +162,26 @@ export default {
 /approve CHAT_ID DAYS
 
 ဥပမာ
-/approve 8840114917 30`
+/approve 123456789 30
+/approve 123456789 90
+/approve 123456789 365
+/approve 123456789 forever`
             );
 
             return new Response("OK");
           }
 
           const targetId = Number(args[1]);
-          const days = Number(args[2]);
+          const duration = args[2].toLowerCase();
 
           if (
-            !Number.isInteger(targetId) ||
+            !Number.isSafeInteger(targetId) ||
             targetId <= 0
           ) {
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
               "❌ Chat ID မမှန်ပါ။"
-            );
-
-            return new Response("OK");
-          }
-
-          if (
-            !Number.isInteger(days) ||
-            days <= 0
-          ) {
-            await sendMessage(
-              env.BOT_TOKEN,
-              chatId,
-              "❌ အသုံးပြုခွင့်ရက် အရေအတွက်မမှန်ပါ။"
             );
 
             return new Response("OK");
@@ -174,22 +198,57 @@ export default {
               chatId,
 `❌ User မတွေ့ပါ။
 
-User ကို Bot တွင် /start အရင်နှိပ်ခိုင်းပါ။`
+User ကို Bot ထဲမှာ /start အရင်နှိပ်ခိုင်းပါ။`
             );
 
             return new Response("OK");
           }
 
-          const expiresAt = new Date();
-          expiresAt.setUTCDate(
-            expiresAt.getUTCDate() + days
-          );
+          let plan;
+          let expiresAt = null;
+          let expireText;
+
+          if (
+            duration === "forever" ||
+            duration === "lifetime"
+          ) {
+            plan = "Lifetime";
+            expireText = "အမြဲတမ်း";
+          } else {
+            const days = Number(duration);
+
+            if (
+              !Number.isInteger(days) ||
+              days <= 0
+            ) {
+              await sendMessage(
+                env.BOT_TOKEN,
+                chatId,
+`❌ သက်တမ်းမမှန်ပါ။
+
+ဥပမာ
+/approve ${targetId} 30
+/approve ${targetId} forever`
+              );
+
+              return new Response("OK");
+            }
+
+            const expireDate = new Date();
+            expireDate.setUTCDate(
+              expireDate.getUTCDate() + days
+            );
+
+            expiresAt = expireDate.toISOString();
+            plan = getPlanName(days);
+            expireText = formatDate(expireDate);
+          }
 
           await approveUser(
             env.DB,
             targetId,
-            `${days} Days`,
-            expiresAt.toISOString()
+            plan,
+            expiresAt
           );
 
           await sendMessage(
@@ -198,27 +257,24 @@ User ကို Bot တွင် /start အရင်နှိပ်ခိုင�
 `✅ အသုံးပြုခွင့်ပေးပြီးပါပြီ။
 
 🆔 Chat ID : ${targetId}
-💎 Plan : ${days} Days
-📅 သက်တမ်းကုန်မည့်နေ့ :
-${formatDate(expiresAt)}`
+💎 Plan : ${plan}
+📅 သက်တမ်းကုန်မည့်နေ့ : ${expireText}`
           );
 
-          // User ကိုပါ အကြောင်းကြားမယ်
           try {
             await sendMessage(
               env.BOT_TOKEN,
               targetId,
 `✅ Admin မှ အသုံးပြုခွင့်ပေးပြီးပါပြီ။
 
-💎 Plan : ${days} Days
-📅 သက်တမ်းကုန်မည့်နေ့ :
-${formatDate(expiresAt)}
+💎 Plan : ${plan}
+📅 သက်တမ်းကုန်မည့်နေ့ : ${expireText}
 
 ယခု Bot ကို အသုံးပြုနိုင်ပါပြီ။`
             );
           } catch (error) {
             console.error(
-              "User approval notification failed:",
+              "Approval notification failed:",
               error
             );
           }
@@ -226,8 +282,13 @@ ${formatDate(expiresAt)}
           return new Response("OK");
         }
 
+        /*
+         * =========================================
+         * ADMIN COMMAND — /ban
+         * =========================================
+         */
         if (text.startsWith("/ban")) {
-          if (!isAdmin(chatId, env)) {
+          if (!admin) {
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
@@ -248,7 +309,7 @@ ${formatDate(expiresAt)}
 /ban CHAT_ID
 
 ဥပမာ
-/ban 8840114917`
+/ban 123456789`
             );
 
             return new Response("OK");
@@ -257,7 +318,7 @@ ${formatDate(expiresAt)}
           const targetId = Number(args[1]);
 
           if (
-            !Number.isInteger(targetId) ||
+            !Number.isSafeInteger(targetId) ||
             targetId <= 0
           ) {
             await sendMessage(
@@ -298,7 +359,7 @@ ${formatDate(expiresAt)}
             await sendMessage(
               env.BOT_TOKEN,
               targetId,
-              "⛔ Admin မှ သင့်အသုံးပြုခွင့်ကို ပိတ်ထားပါသည်။"
+              "⛔ Admin မှ သင့် Bot အသုံးပြုခွင့်ကို ပိတ်ထားပါသည်။"
             );
           } catch (error) {
             console.error(
@@ -311,11 +372,13 @@ ${formatDate(expiresAt)}
         }
 
         /*
+         * =========================================
          * START COMMAND
+         * =========================================
          */
-
         if (text === "/start") {
           let user = await getUser(env.DB, chatId);
+          const isNewUser = !user;
 
           if (!user) {
             await createUser(
@@ -328,8 +391,11 @@ ${formatDate(expiresAt)}
             user = await getUser(env.DB, chatId);
           }
 
-          // Admin ကို အမြဲအသုံးပြုခွင့်ပေးမယ်
-          if (isAdmin(chatId, env)) {
+          /*
+           * Admin ကို License မစစ်ဘဲ
+           * အမြဲအသုံးပြုခွင့်ပေးမယ်။
+           */
+          if (admin) {
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
@@ -341,6 +407,7 @@ Admin Commands
 
 /users
 /approve CHAT_ID DAYS
+/approve CHAT_ID forever
 /ban CHAT_ID
 
 ဥပမာ
@@ -365,29 +432,34 @@ ${access.message}
 Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
             );
 
-            // Admin ဆီ User အသစ်အကြောင်းပို့မယ်
-            try {
-              await sendMessage(
-                env.BOT_TOKEN,
-                Number(env.ADMIN_ID),
+            /*
+             * User အသစ်ဖြစ်မှ Admin ဆီ
+             * Request တစ်ကြိမ်ပို့မယ်။
+             */
+            if (isNewUser) {
+              try {
+                await sendMessage(
+                  env.BOT_TOKEN,
+                  getAdminId(env),
 `🔔 အသုံးပြုခွင့်တောင်းဆိုမှု
 
 👤 အမည် : ${from.first_name || "မရှိ"}
 📛 Username : ${
-                  from.username
-                    ? `@${from.username}`
-                    : "မရှိ"
-                }
+                    from.username
+                      ? `@${from.username}`
+                      : "မရှိ"
+                  }
 🆔 Chat ID : ${chatId}
 
 ခွင့်ပြုရန်
 /approve ${chatId} 30`
-              );
-            } catch (error) {
-              console.error(
-                "Admin notification failed:",
-                error
-              );
+                );
+              } catch (error) {
+                console.error(
+                  "Admin notification failed:",
+                  error
+                );
+              }
             }
 
             return new Response("OK");
@@ -412,36 +484,52 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
         }
 
         /*
+         * =========================================
          * HELP COMMAND
+         * =========================================
          */
-
         if (text === "/help") {
+          if (!admin) {
+            const user = await getUser(env.DB, chatId);
+            const access = hasAccess(user);
+
+            if (!access.ok) {
+              await sendMessage(
+                env.BOT_TOKEN,
+                chatId,
+                access.message
+              );
+
+              return new Response("OK");
+            }
+          }
+
           await sendMessage(
             env.BOT_TOKEN,
             chatId,
-`📖 Help
-
-/start - Start Bot
-/help - Help Menu
-
-စာရင်းပို့ရန် ဥပမာ
+`📖 အသုံးပြုပုံ
 
 12 500
 12R 500
 12r 500
 12® 500
 12Ⓡ 500
-123 ခွေ 500`
+12 R 500
+123 ခွေ 500
+123 အခွေ 500
+123 ခွေပူး 500
+123 အခွေပူး 500`
           );
 
           return new Response("OK");
         }
 
         /*
-         * NORMAL USER ACCESS CHECK
+         * =========================================
+         * ပုံမှန် User License စစ်ခြင်း
+         * =========================================
          */
-
-        if (!isAdmin(chatId, env)) {
+        if (!admin) {
           const user = await getUser(env.DB, chatId);
           const access = hasAccess(user);
 
@@ -457,18 +545,21 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
         }
 
         /*
+         * =========================================
          * BET PARSER
+         * =========================================
          */
-
         try {
-          const bet = parseBetMessage(text);
+          const bet = parseBetMessage(originalText);
 
           const displayName =
             from.first_name ||
             from.username ||
             "New Zealand 2D";
 
-          const betLabel = removeLastAmount(text);
+          const betLabel = removeLastAmount(
+            originalText
+          );
 
           await sendMessage(
             env.BOT_TOKEN,
@@ -486,6 +577,35 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
 
 🍀 ဂဏန်းများ ပြန်စစ်ပေးပါ 🍀`
           );
+
+          /*
+           * Transaction သိမ်းမယ်။
+           * Table မရှိလျှင် Bot မပျက်စေရန် catch သီးခြားထားသည်။
+           */
+          try {
+            await env.DB.prepare(`
+              INSERT INTO transactions
+              (
+                chat_id,
+                bet_text,
+                total_amount,
+                created_at
+              )
+              VALUES (?, ?, ?, ?)
+            `)
+              .bind(
+                chatId,
+                originalText,
+                bet.totalAmount,
+                new Date().toISOString()
+              )
+              .run();
+          } catch (databaseError) {
+            console.error(
+              "Transaction save failed:",
+              databaseError
+            );
+          }
         } catch (error) {
           await sendMessage(
             env.BOT_TOKEN,
@@ -499,7 +619,11 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
 12r 500
 12® 500
 12Ⓡ 500
+12 R 500
 123 ခွေ 500
+123 အခွေ 500
+123 ခွေပူး 500
+123 အခွေပူး 500
 
 အမှား : ${error.message}`
           );
@@ -524,6 +648,49 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
   }
 };
 
+/*
+ * Admin ID စစ်ခြင်း
+ *
+ * Cloudflare ADMIN_ID ရှိရင် အဲဒါသုံးမယ်။
+ * မရှိရင် DEFAULT_ADMIN_ID ကိုသုံးမယ်။
+ */
+function getAdminId(env) {
+  const configuredId = Number(env.ADMIN_ID);
+
+  if (
+    Number.isSafeInteger(configuredId) &&
+    configuredId > 0
+  ) {
+    return configuredId;
+  }
+
+  return DEFAULT_ADMIN_ID;
+}
+
+function isAdminUser(userId, env) {
+  return Number(userId) === getAdminId(env);
+}
+
+/*
+ * /start@BotUsername ကို /start ပြောင်းပေးခြင်း
+ */
+function normalizeCommand(text) {
+  return String(text)
+    .trim()
+    .replace(
+      /^\/([a-zA-Z]+)@[a-zA-Z0-9_]+/,
+      "/$1"
+    );
+}
+
+function getPlanName(days) {
+  if (days === 30) return "Silver — 30 Days";
+  if (days === 90) return "Gold — 90 Days";
+  if (days === 365) return "Platinum — 365 Days";
+
+  return `${days} Days`;
+}
+
 function removeLastAmount(text) {
   return String(text)
     .trim()
@@ -532,10 +699,21 @@ function removeLastAmount(text) {
 }
 
 function formatMoney(amount) {
-  return Number(amount || 0).toLocaleString("en-US");
+  return Number(amount || 0).toLocaleString(
+    "en-US"
+  );
 }
 
-function formatDate(date) {
+function formatDate(value) {
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "မသိရှိပါ";
+  }
+
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Yangon",
     year: "numeric",
@@ -544,7 +722,23 @@ function formatDate(date) {
   }).format(date);
 }
 
-async function sendLongMessage(token, chatId, text) {
+function jsonResponse(data, status = 200) {
+  return new Response(
+    JSON.stringify(data),
+    {
+      status,
+      headers: {
+        "Content-Type": "application/json"
+      }
+    }
+  );
+}
+
+async function sendLongMessage(
+  token,
+  chatId,
+  text
+) {
   const maxLength = 4000;
 
   for (
@@ -560,7 +754,15 @@ async function sendLongMessage(token, chatId, text) {
   }
 }
 
-async function sendMessage(token, chatId, text) {
+async function sendMessage(
+  token,
+  chatId,
+  text
+) {
+  if (!token) {
+    throw new Error("BOT_TOKEN မရှိပါ။");
+  }
+
   const response = await fetch(
     `https://api.telegram.org/bot${token}/sendMessage`,
     {
@@ -584,4 +786,4 @@ async function sendMessage(token, chatId, text) {
   }
 
   return response;
-            }
+      }

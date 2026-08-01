@@ -1,21 +1,34 @@
-export function parseBet(text) {
-  const lines = text
-    .split("\n")
-    .map(v => v.trim())
-    .filter(Boolean);
+import { expandReverse } from "./rules.js";
+import { calculateBet } from "./calculator.js";
 
-  const bets = [];
+/**
+ * User Message Parser
+ * ဥပမာ:
+ * 12 500
+ * 12R 500
+ */
 
-  for (const line of lines) {
-    const m = line.match(/^(.+?)=(\d+)$/);
+export function parseBetMessage(text) {
+  text = text.trim();
 
-    if (!m) continue;
+  const parts = text.split(/\s+/);
 
-    bets.push({
-      bet: m[1].trim(),
-      amount: Number(m[2])
-    });
+  if (parts.length < 2) {
+    throw new Error("အသုံးပြုပုံ - 12 500");
   }
 
-  return bets;
+  let number = parts[0];
+  const amount = parts[1];
+
+  let numbers = [];
+
+  // Reverse Rule
+  if (number.toUpperCase().endsWith("R")) {
+    number = number.slice(0, -1);
+    numbers = expandReverse([number]);
+  } else {
+    numbers = [number];
+  }
+
+  return calculateBet(numbers, amount);
 }

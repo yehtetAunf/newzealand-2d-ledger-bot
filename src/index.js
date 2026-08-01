@@ -94,6 +94,92 @@ await sendMessage(
 /start
 /help`
 );
+          
+        }else if (isAdmin(chatId, env) && text === "/users") {
+
+  const users = await listUsers(env.DB);
+
+  if (!users.length) {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "User မရှိသေးပါ။"
+    );
+    return new Response("OK");
+  }
+
+  let msg = "👥 Users List\n\n";
+
+  for (const u of users) {
+    msg +=
+      `${u.chat_id}\n` +
+      `Status : ${u.status}\n` +
+      `Plan : ${u.plan}\n\n`;
+  }
+
+  await sendMessage(
+    env.BOT_TOKEN,
+    chatId,
+    msg
+  );
+
+}
+else if (isAdmin(chatId, env) && text.startsWith("/approve")) {
+
+  const args = text.split(" ");
+
+  if (args.length < 3) {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "အသုံးပြုပုံ\n/approve CHAT_ID DAYS"
+    );
+    return new Response("OK");
+  }
+
+  const targetId = Number(args[1]);
+  const days = Number(args[2]);
+
+  const expires = new Date();
+  expires.setDate(expires.getDate() + days);
+
+  await approveUser(
+    env.DB,
+    targetId,
+    `${days} Days`,
+    expires.toISOString()
+  );
+
+  await sendMessage(
+    env.BOT_TOKEN,
+    chatId,
+    "✅ Approved"
+  );
+
+}
+else if (isAdmin(chatId, env) && text.startsWith("/ban")) {
+
+  const args = text.split(" ");
+
+  if (args.length < 2) {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "အသုံးပြုပုံ\n/ban CHAT_ID"
+    );
+    return new Response("OK");
+  }
+
+  await banUser(
+    env.DB,
+    Number(args[1])
+  );
+
+  await sendMessage(
+    env.BOT_TOKEN,
+    chatId,
+    "⛔ User Banned"
+  );
 
         } else if (text === "/help") {
           await sendMessage(

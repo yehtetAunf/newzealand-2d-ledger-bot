@@ -1,4 +1,5 @@
 import { parseBetMessage } from "./parser.js";
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -25,38 +26,30 @@ export default {
       try {
         const update = await request.json();
 
-        if (update.message) {
-          const chatId = update.message.chat.id;
-          const text = update.message.text || "";
-          const from = update.message.from || {};
+        if (!update.message) {
+          return new Response("OK");
+        }
 
-          if (text === "/start") {
+        const chatId = update.message.chat.id;
+        const text = String(update.message.text || "").trim();
+        const from = update.message.from || {};
 
-            // Create users table
-            await env.DB.prepare(`
-              CREATE TABLE IF NOT EXISTS users (
-                chat_id INTEGER PRIMARY KEY,
-                username TEXT,
-                first_name TEXT,
-                created_at TEXT
-              )
-            `).run();
+        if (!text) {
+          return new Response("OK");
+        }
 
-            // Save user
-            await env.DB.prepare(`
-              INSERT OR REPLACE INTO users
-              (chat_id, username, first_name, created_at)
-              VALUES (?, ?, ?, ?)
-            `).bind(
-              chatId,
-              from.username || "",
-              from.first_name || "",
-              new Date().toISOString()
-            ).run();
+        if (text === "/start") {
+          await createUsersTable(env);
 
-            await sendMessage(
-              env.BOT_TOKEN,
-              chatId,
+          await saveUser(env, {
+            chatId,
+            username: from.username || "",
+            firstName: from.first_name || ""
+          });
+
+          await sendMessage(
+            env.BOT_TOKEN,
+            chatId,
 `👋 Welcome ${from.first_name || ""}
 
 ✅ New Zealand 2D Ledger Bot
@@ -67,62 +60,85 @@ export default {
 
 /start
 /help`
-            );
+          );
 
-          } else if (text === "/help") {
+        } else if (text === "/help") {
+          await sendMessage(
+            env.BOT_TOKEN,
+            chatId,
+`📖 Help
+
+/start - Start Bot
+/help - Help Menu
+
+စာရင်းပို့ရန် ဥပမာ
+
+12 500
+12R 500
+12r 500
+12® 500
+12Ⓡ 500
+123 ခွေ 500`
+          );
+
+        } else {
+          try {
+            const bet = parseBetMessage(text);
+            const displayName =
+              from.first_name ||
+              from.username ||
+              "New Zealand 2D";
+
+            const betLabel = removeLastAmount(text);
 
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
-`📖 Help
+`📝 REPORT
 
-/start - Start Bot
-/help - Help Menu`
+👤 ထိုးသူ : ${displayName}
+━━━━━━━━━━━━━━━━━━
+
+🔹 ${betLabel} (${bet.count} ကွက်)
+💰 ထိုးငွေ : ${formatMoney(bet.totalAmount)} ကျပ်
+
+━━━━━━━━━━━━━━━━━━
+💵 စုစုပေါင်း : ${formatMoney(bet.totalAmount)} ကျပ်
+
+🏛 🍀 ဂဏန်းများ ပြန်စစ်ပေးပါ 🍀`
             );
 
-          } else {
-
-  try {
-    const bet = parseBetMessage(text);
-
-    const numbersText = bet.numbers.join(" ");
-
-    await sendMessage(
-      env.BOT_TOKEN,
-      chatId,
-`✅ စာရင်းတွက်ချက်ပြီးပါပြီ
-
-🔢 ဂဏန်း: ${numbersText}
-📊 အရေအတွက်: ${bet.count} ကွက်
-💵 တစ်ကွက်ငွေ: ${bet.amountPerNumber.toLocaleString()} ကျပ်
-💰 စုစုပေါင်း: ${bet.totalAmount.toLocaleString()} ကျပ်`
-    );
-
-  } catch (error) {
-
-    await sendMessage(
-      env.BOT_TOKEN,
-      chatId,
+          } catch (error) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
 `❌ စာရင်းပုံစံမမှန်ပါ။
 
 အသုံးပြုပုံ
+
 12 500
 12R 500
+12r 500
+12® 500
+12Ⓡ 500
+123 ခွေ 500
 
-အမှား: ${error.message}`
-    );
-
-  }
-
-                }
+အမှား : ${error.message}`
+            );
+          }
         }
 
         return new Response("OK");
 
-      } catch (err) {
-        return new Response(err.stack || err.toString(), {
-          status: 500
-        });
+      } catch (error) {
+        console.error("Webhook error:", error);
+
+        return new Response(
+          error.stack || error.toString(),
+          {
+            status: 500
+          }
+        );
       }
     }
 
@@ -132,8 +148,55 @@ export default {
   }
 };
 
+async function createUsersTable(env) {
+  await env.DB.prepare(`
+    CREATE TABLE IF NOT EXISTS users (
+      chat_id INTEGER PRIMARY KEY,
+      username TEXT,
+      first_name TEXT,
+      created_at TEXT
+    )
+  `).run();
+}
+
+async function saveUser(
+  env,
+  {
+    chatId,
+    username,
+    firstName
+  }
+) {
+  await env.DB.prepare(`
+    INSERT OR REPLACE INTO users
+    (
+      chat_id,
+      username,
+      first_name,
+      created_at
+    )
+    VALUES (?, ?, ?, ?)
+  `).bind(
+    chatId,
+    username,
+    firstName,
+    new Date().toISOString()
+  ).run();
+}
+
+function removeLastAmount(text) {
+  return String(text)
+    .trim()
+    .replace(/\s+[\d,]+\s*$/, "")
+    .replace(/\s+/g, " ");
+}
+
+function formatMoney(amount) {
+  return Number(amount || 0).toLocaleString("en-US");
+}
+
 async function sendMessage(token, chatId, text) {
-  return fetch(
+  const response = await fetch(
     `https://api.telegram.org/bot${token}/sendMessage`,
     {
       method: "POST",
@@ -146,4 +209,14 @@ async function sendMessage(token, chatId, text) {
       })
     }
   );
-              }
+
+  if (!response.ok) {
+    const errorText = await response.text();
+
+    throw new Error(
+      `Telegram sendMessage failed: ${errorText}`
+    );
+  }
+
+  return response;
+}

@@ -2,7 +2,8 @@ import { parseBetMessage } from "./parser.js";
 
 import {
   getUser,
-  createUser
+  createUser,
+  addBetItemsToNumberTotals
 } from "./database.js";
 
 import { hasAccess } from "./license.js";
@@ -140,7 +141,10 @@ export default {
             chatId,
             report
           );
-
+await addBetItemsToNumberTotals(
+  env.DB,
+  bet.items
+);
           return new Response("OK");
         }
 

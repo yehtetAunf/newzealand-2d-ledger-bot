@@ -23,7 +23,7 @@ export function parseBetMessage(text) {
   let numbers = [];
 
   // Reverse Rule
-  if (number.toUpperCase().endsWith("R")) {
+  if (/[Rr®]$/.test(number)) {
     number = number.slice(0, -1);
     numbers = expandReverse([number]);
   } else {

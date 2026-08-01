@@ -10,14 +10,32 @@ import {
 /**
  * User Message Parser
  *
- * လက်ရှိထောက်ပံ့သောပုံစံများ
+ * ထောက်ပံ့သောပုံစံများ
  *
+ * Direct
  * 12 500
+ *
+ * Reverse
  * 12R 500
  * 12r 500
  * 12® 500
  * 12Ⓡ 500
+ * 12 R 500
+ * 12 r 500
+ * 12 ® 500
+ * 12 Ⓡ 500
+ *
+ * ခွေ — အပူးမပါ
+ * 123ခွေ 500
  * 123 ခွေ 500
+ * 123အခွေ 500
+ * 123 အခွေ 500
+ *
+ * ခွေပူး — အပူးပါ
+ * 123ခွေပူး 500
+ * 123 ခွေပူး 500
+ * 123အခွေပူး 500
+ * 123 အခွေပူး 500
  */
 
 export function parseBetMessage(text) {
@@ -29,72 +47,82 @@ export function parseBetMessage(text) {
     throw new Error("စာရင်းမတွေ့ပါ။");
   }
 
-  const parts = normalizedText.split(" ");
-
-  if (parts.length < 2) {
-    throw new Error(
-      "အသုံးပြုပုံ - 12 500 သို့မဟုတ် 123 ခွေ 500"
-    );
-  }
-
-  let numbers = [];
-  let amount;
-
   /*
-   * Khway Rule
+   * ခွေ / အခွေ / ခွေပူး / အခွေပူး
    *
-   * 123 ခွေ 500
+   * Space ပါတာ၊ မပါတာ နှစ်မျိုးလုံး လက်ခံမယ်။
    */
-  if (
-    parts.length >= 3 &&
-    /^(ခွေ|အခွေ)$/i.test(parts[1])
-  ) {
-    const digitText = parts[0];
-    amount = parts[2];
+  const khwayMatch = normalizedText.match(
+    /^(\d{3,9})\s*(အ?ခွေ)(ပူး)?\s+([\d,]+)$/
+  );
 
-    if (!/^\d{3,9}$/.test(digitText)) {
-      throw new Error(
-        "ခွေအတွက် ဂဏန်း ၃ လုံးမှ ၉ လုံးအထိ ထည့်ပါ။"
-      );
-    }
+  if (khwayMatch) {
+    const digitText = khwayMatch[1];
+    const hasDouble = Boolean(khwayMatch[3]);
+    const amount = khwayMatch[4];
 
     const digits = digitText.split("");
 
-    numbers = expandKhway(digits, false);
-  } else {
-    /*
-     * Direct / Reverse Rule
-     *
-     * 12 500
-     * 12R 500
-     * 12r 500
-     * 12® 500
-     * 12Ⓡ 500
-     */
+    const numbers = expandKhway(
+      digits,
+      hasDouble
+    );
 
-    let number = parts[0];
-    amount = parts[1];
-
-    if (/[Rr®Ⓡ]$/.test(number)) {
-      number = number.replace(/[Rr®Ⓡ]$/, "");
-
-      if (!/^\d{2}$/.test(number)) {
-        throw new Error(
-          "R Rule အတွက် 2D ဂဏန်းမှန်ကန်စွာ ထည့်ပါ။"
-        );
-      }
-
-      numbers = expandReverse([number]);
-    } else {
-      if (!/^\d{2}$/.test(number)) {
-        throw new Error(
-          "2D ဂဏန်းမှန်ကန်စွာ ထည့်ပါ။ ဥပမာ - 12 500"
-        );
-      }
-
-      numbers = [number];
-    }
+    return calculateBet(
+      numbers,
+      amount
+    );
   }
 
-  return calculateBet(numbers, amount);
-}
+  /*
+   * Reverse — Symbol က ဂဏန်းနဲ့ကပ်ရေးလို့ရသလို
+   * Space ခြားပြီးလည်း ရေးလို့ရတယ်။
+   */
+  const reverseMatch = normalizedText.match(
+    /^(\d{2})\s*([Rr®Ⓡ])\s+([\d,]+)$/
+  );
+
+  if (reverseMatch) {
+    const number = reverseMatch[1];
+    const amount = reverseMatch[3];
+
+    const numbers = expandReverse([number]);
+
+    return calculateBet(
+      numbers,
+      amount
+    );
+  }
+
+  /*
+   * Direct 2D
+   */
+  const directMatch = normalizedText.match(
+    /^(\d{2})\s+([\d,]+)$/
+  );
+
+  if (directMatch) {
+    const number = directMatch[1];
+    const amount = directMatch[2];
+
+    return calculateBet(
+      [number],
+      amount
+    );
+  }
+
+  throw new Error(
+    [
+      "စာရင်းပုံစံမမှန်ပါ။",
+      "",
+      "ဥပမာ",
+      "12 500",
+      "12R 500",
+      "12 R 500",
+      "123ခွေ 500",
+      "123 အခွေ 500",
+      "123ခွေပူး 500",
+      "123 အခွေပူး 500"
+    ].join("\n")
+  );
+      }

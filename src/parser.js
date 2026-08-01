@@ -8,8 +8,9 @@
 import {
   isReverseSymbol,
   expand2DEntries,
-  countKhway,
+  expandKhway,
   getFixedRuleCount,
+  getSpecialRuleNumbers,
   countDigitRule,
   countGapRule,
   isFixedCountRule
@@ -165,19 +166,23 @@ function parseTokenAt(
    * မစုံ
    */
   if (isFixedCountRule(token)) {
-    const fixed = getFixedRuleCount(token);
+  const fixed = getFixedRuleCount(token);
+  const numbers = getSpecialRuleNumbers(
+    fixed.rule
+  );
 
-    return {
-      items: [
-        createBetItem({
-          label: token,
-          rule: "fixed",
-          count: fixed.count,
-          amount
-        })
-      ],
-      nextIndex: index + 1
-    };
+  return {
+    items: [
+      createBetItem({
+        label: token,
+        rule: fixed.rule,
+        numbers,
+        count: numbers.length,
+        amount
+      })
+    ],
+    nextIndex: index + 1
+  };
   }
 
   /*

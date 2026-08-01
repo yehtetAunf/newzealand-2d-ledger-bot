@@ -1,3 +1,4 @@
+import { parseBetMessage } from "./parser.js";
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -81,13 +82,39 @@ export default {
 
           } else {
 
-            await sendMessage(
-              env.BOT_TOKEN,
-              chatId,
-              "📩 Received: " + text
-            );
+  try {
+    const bet = parseBetMessage(text);
 
-          }
+    const numbersText = bet.numbers.join(" ");
+
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+`✅ စာရင်းတွက်ချက်ပြီးပါပြီ
+
+🔢 ဂဏန်း: ${numbersText}
+📊 အရေအတွက်: ${bet.count} ကွက်
+💵 တစ်ကွက်ငွေ: ${bet.amountPerNumber.toLocaleString()} ကျပ်
+💰 စုစုပေါင်း: ${bet.totalAmount.toLocaleString()} ကျပ်`
+    );
+
+  } catch (error) {
+
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+`❌ စာရင်းပုံစံမမှန်ပါ။
+
+အသုံးပြုပုံ
+12 500
+12R 500
+
+အမှား: ${error.message}`
+    );
+
+  }
+
+                }
         }
 
         return new Response("OK");

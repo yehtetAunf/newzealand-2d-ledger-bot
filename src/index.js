@@ -774,10 +774,15 @@ ${reportLines}
 🏛 🍀 ဂဏန်းများ ပြန်စစ်ပါ 🍀`;
 
           await sendLongMessage(
-            env.BOT_TOKEN,
-            chatId,
-            report
-          );
+  env.BOT_TOKEN,
+  chatId,
+  report
+);
+
+await addBetItemsToNumberTotals(
+  env.DB,
+  bet.items
+);
 
           /*
            * Transaction သိမ်းခြင်း

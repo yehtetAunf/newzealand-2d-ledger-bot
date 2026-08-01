@@ -15,8 +15,8 @@ import {
 } from "./admin.js";
 
 /*
- * Admin Telegram User ID
- * Cloudflare ADMIN_ID မရခဲ့ရင်လည်း ဒီ ID ကို အသုံးပြုမယ်။
+ * Cloudflare ADMIN_ID မရှိခဲ့ရင်
+ * ဒီ Telegram User ID ကို အသုံးပြုမယ်။
  */
 const DEFAULT_ADMIN_ID = 8840114917;
 
@@ -25,7 +25,9 @@ export default {
     const url = new URL(request.url);
 
     /*
-     * Health Check
+     * =========================================
+     * HEALTH CHECK
+     * =========================================
      */
     if (
       request.method === "GET" &&
@@ -33,14 +35,18 @@ export default {
     ) {
       return jsonResponse({
         ok: true,
-        bot: env.BOT_NAME || "New Zealand 2D Ledger Bot",
+        bot:
+          env.BOT_NAME ||
+          "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "2.0.0"
+        version: "3.0.0"
       });
     }
 
     /*
-     * Telegram Webhook
+     * =========================================
+     * TELEGRAM WEBHOOK
+     * =========================================
      */
     if (
       request.method === "POST" &&
@@ -56,7 +62,6 @@ export default {
         const message = update.message;
         const chatId = message.chat.id;
         const from = message.from || {};
-        const userId = from.id || chatId;
 
         const originalText = String(
           message.text || ""
@@ -67,10 +72,12 @@ export default {
         }
 
         /*
-         * /command@BotUsername ပုံစံကိုလည်း
-         * /command ပုံစံအဖြစ် ပြောင်းမယ်။
+         * /start@BotUsername
+         * ပုံစံကို /start အဖြစ်ပြောင်းမယ်။
          */
-        const text = normalizeCommand(originalText);
+        const text =
+          normalizeCommand(originalText);
+
         const admin = isAdmin(chatId, env);
 
         /*
@@ -105,18 +112,28 @@ export default {
 
           for (const user of users) {
             report +=
-              `👤 အမည် : ${user.first_name || "မရှိ"}\n` +
-              `🆔 Chat ID : ${user.chat_id}\n` +
+              `👤 အမည် : ${
+                user.first_name || "မရှိ"
+              }\n` +
+              `🆔 Chat ID : ${
+                user.chat_id
+              }\n` +
               `📛 Username : ${
                 user.username
                   ? `@${user.username}`
                   : "မရှိ"
               }\n` +
-              `📌 Status : ${user.status || "pending"}\n` +
-              `💎 Plan : ${user.plan || "none"}\n` +
+              `📌 Status : ${
+                user.status || "pending"
+              }\n` +
+              `💎 Plan : ${
+                user.plan || "none"
+              }\n` +
               `📅 Expire : ${
                 user.expires_at
-                  ? formatDate(user.expires_at)
+                  ? formatDate(
+                      user.expires_at
+                    )
                   : "မရှိ"
               }\n` +
               `━━━━━━━━━━━━━━━━━━\n`;
@@ -136,8 +153,6 @@ export default {
          * ADMIN COMMAND — /approve
          *
          * /approve CHAT_ID 30
-         * /approve CHAT_ID 90
-         * /approve CHAT_ID 365
          * /approve CHAT_ID forever
          * =========================================
          */
@@ -173,10 +188,13 @@ export default {
           }
 
           const targetId = Number(args[1]);
-          const duration = args[2].toLowerCase();
+          const duration =
+            args[2].toLowerCase();
 
           if (
-            !Number.isSafeInteger(targetId) ||
+            !Number.isSafeInteger(
+              targetId
+            ) ||
             targetId <= 0
           ) {
             await sendMessage(
@@ -188,10 +206,11 @@ export default {
             return new Response("OK");
           }
 
-          const targetUser = await getUser(
-            env.DB,
-            targetId
-          );
+          const targetUser =
+            await getUser(
+              env.DB,
+              targetId
+            );
 
           if (!targetUser) {
             await sendMessage(
@@ -235,14 +254,20 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
               return new Response("OK");
             }
 
-            const expireDate = new Date();
+            const expireDate =
+              new Date();
+
             expireDate.setUTCDate(
-              expireDate.getUTCDate() + days
+              expireDate.getUTCDate() +
+                days
             );
 
-            expiresAt = expireDate.toISOString();
+            expiresAt =
+              expireDate.toISOString();
+
             plan = getPlanName(days);
-            expireText = formatDate(expireDate);
+            expireText =
+              formatDate(expireDate);
           }
 
           await approveUser(
@@ -316,10 +341,13 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
             return new Response("OK");
           }
 
-          const targetId = Number(args[1]);
+          const targetId =
+            Number(args[1]);
 
           if (
-            !Number.isSafeInteger(targetId) ||
+            !Number.isSafeInteger(
+              targetId
+            ) ||
             targetId <= 0
           ) {
             await sendMessage(
@@ -331,10 +359,11 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
             return new Response("OK");
           }
 
-          const targetUser = await getUser(
-            env.DB,
-            targetId
-          );
+          const targetUser =
+            await getUser(
+              env.DB,
+              targetId
+            );
 
           if (!targetUser) {
             await sendMessage(
@@ -346,7 +375,10 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
             return new Response("OK");
           }
 
-          await banUser(env.DB, targetId);
+          await banUser(
+            env.DB,
+            targetId
+          );
 
           await sendMessage(
             env.BOT_TOKEN,
@@ -371,82 +403,116 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
 
           return new Response("OK");
         }
-/*
- * ==========================
- * ADMIN COMMAND - /unban
- * ==========================
- */
-if (text.startsWith("/unban")) {
-  if (!admin) {
-    await sendMessage(
-      env.BOT_TOKEN,
-      chatId,
-      "⛔ ဤ Command ကို Admin သာ အသုံးပြုနိုင်ပါသည်။"
-    );
-    return new Response("OK");
-  }
 
-  const args = text.split(/\s+/);
+        /*
+         * =========================================
+         * ADMIN COMMAND — /unban
+         * =========================================
+         */
+        if (text.startsWith("/unban")) {
+          if (!admin) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              "⛔ ဤ Command ကို Admin သာ အသုံးပြုနိုင်ပါသည်။"
+            );
 
-  if (args.length !== 2) {
-    await sendMessage(
-      env.BOT_TOKEN,
-      chatId,
+            return new Response("OK");
+          }
+
+          const args = text.split(/\s+/);
+
+          if (args.length !== 2) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
 `အသုံးပြုပုံ
 
 /unban CHAT_ID
 
 ဥပမာ
 /unban 123456789`
-    );
-    return new Response("OK");
-  }
+            );
 
-  const targetId = Number(args[1]);
+            return new Response("OK");
+          }
 
-  const targetUser = await getUser(env.DB, targetId);
+          const targetId =
+            Number(args[1]);
 
-  if (!targetUser) {
-    await sendMessage(
-      env.BOT_TOKEN,
-      chatId,
-      "❌ User မတွေ့ပါ"
-    );
-    return new Response("OK");
-  }
+          if (
+            !Number.isSafeInteger(
+              targetId
+            ) ||
+            targetId <= 0
+          ) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              "❌ Chat ID မမှန်ပါ။"
+            );
 
-  await approveUser(
-    env.DB,
-    targetId,
-    "Free",
-    "2099-12-31T23:59:59.000Z"
-  );
+            return new Response("OK");
+          }
 
-  await sendMessage(
-    env.BOT_TOKEN,
-    chatId,
-`✅ User ကို Unban လုပ်ပြီးပါပြီ
+          const targetUser =
+            await getUser(
+              env.DB,
+              targetId
+            );
+
+          if (!targetUser) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              "❌ User မတွေ့ပါ။"
+            );
+
+            return new Response("OK");
+          }
+
+          await approveUser(
+            env.DB,
+            targetId,
+            "Free",
+            "2099-12-31T23:59:59.000Z"
+          );
+
+          await sendMessage(
+            env.BOT_TOKEN,
+            chatId,
+`✅ User ကို Unban လုပ်ပြီးပါပြီ။
 
 🆔 Chat ID : ${targetId}`
-  );
+          );
 
-  try {
-    await sendMessage(
-      env.BOT_TOKEN,
-      targetId,
-      "✅ Admin မှ သင့် Account ကို ပြန်ဖွင့်ပေးလိုက်ပါပြီ။"
-    );
-  } catch (e) {}
+          try {
+            await sendMessage(
+              env.BOT_TOKEN,
+              targetId,
+              "✅ Admin မှ သင့် Account ကို ပြန်ဖွင့်ပေးလိုက်ပါပြီ။"
+            );
+          } catch (error) {
+            console.error(
+              "Unban notification failed:",
+              error
+            );
+          }
 
-  return new Response("OK");
-      }
+          return new Response("OK");
+        }
+
         /*
          * =========================================
          * START COMMAND
          * =========================================
          */
         if (text === "/start") {
-          let user = await getUser(env.DB, chatId);
+          let user = await getUser(
+            env.DB,
+            chatId
+          );
+
           const isNewUser = !user;
 
           if (!user) {
@@ -457,7 +523,10 @@ if (text.startsWith("/unban")) {
               from.first_name || ""
             );
 
-            user = await getUser(env.DB, chatId);
+            user = await getUser(
+              env.DB,
+              chatId
+            );
           }
 
           /*
@@ -478,6 +547,7 @@ Admin Commands
 /approve CHAT_ID DAYS
 /approve CHAT_ID forever
 /ban CHAT_ID
+/unban CHAT_ID
 
 ဥပမာ
 /approve 123456789 30`
@@ -486,7 +556,8 @@ Admin Commands
             return new Response("OK");
           }
 
-          const access = hasAccess(user);
+          const access =
+            hasAccess(user);
 
           if (!access.ok) {
             await sendMessage(
@@ -502,8 +573,8 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
             );
 
             /*
-             * User အသစ်ဖြစ်မှ Admin ဆီ
-             * Request တစ်ကြိမ်ပို့မယ်။
+             * User အသစ်ဖြစ်မှ
+             * Admin ထံ Request ပို့မယ်။
              */
             if (isNewUser) {
               try {
@@ -512,7 +583,10 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
                   getAdminId(env),
 `🔔 အသုံးပြုခွင့်တောင်းဆိုမှု
 
-👤 အမည် : ${from.first_name || "မရှိ"}
+👤 အမည် : ${
+                    from.first_name ||
+                    "မရှိ"
+                  }
 📛 Username : ${
                     from.username
                       ? `@${from.username}`
@@ -559,8 +633,14 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
          */
         if (text === "/help") {
           if (!admin) {
-            const user = await getUser(env.DB, chatId);
-            const access = hasAccess(user);
+            const user =
+              await getUser(
+                env.DB,
+                chatId
+              );
+
+            const access =
+              hasAccess(user);
 
             if (!access.ok) {
               await sendMessage(
@@ -578,16 +658,34 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
             chatId,
 `📖 အသုံးပြုပုံ
 
-12 500
-12R 500
-12r 500
-12® 500
-12Ⓡ 500
-12 R 500
-123 ခွေ 500
-123 အခွေ 500
-123 ခွေပူး 500
-123 အခွေပူး 500`
+Direct / Reverse
+67 500
+67R 500
+67R 78R 90R 500
+67-78-90 R 500
+
+အခွေ
+60147 အခွေ 500
+60147 အခွေပူး 500
+
+Fixed Rules
+အပူး 500
+ပါဝါ 500
+နက္ခတ် 500
+ညီကို 500
+စုံစုံ 500
+မမ 500
+စုံမ 500
+မစုံ 500
+
+ပါတ် / ထိပ် / ပိတ်
+8/9 ပါတ် 500
+1/7 ထိပ် 500
+3/5 ပိတ် 500
+
+ကပ်ဂဏန်း
+67/12345890 500
+67/12345890 R 500`
           );
 
           return new Response("OK");
@@ -595,12 +693,17 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
 
         /*
          * =========================================
-         * ပုံမှန် User License စစ်ခြင်း
+         * USER LICENSE CHECK
          * =========================================
          */
         if (!admin) {
-          const user = await getUser(env.DB, chatId);
-          const access = hasAccess(user);
+          const user = await getUser(
+            env.DB,
+            chatId
+          );
+
+          const access =
+            hasAccess(user);
 
           if (!access.ok) {
             await sendMessage(
@@ -615,41 +718,83 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
 
         /*
          * =========================================
-         * BET PARSER
+         * BET PARSER + REPORT
          * =========================================
          */
         try {
-          const bet = parseBetMessage(originalText);
+          const bet =
+            parseBetMessage(
+              originalText
+            );
 
           const displayName =
             from.first_name ||
             from.username ||
             "New Zealand 2D";
 
-          const betLabel = removeLastAmount(
-            originalText
-          );
+          /*
+           * Report ID:
+           * NZ000001, NZ000002...
+           */
+          const reportId =
+            await getNextReportId(
+              env.DB
+            );
 
-          await sendMessage(
+          const now = new Date();
+
+          const dateText =
+            formatYangonDate(now);
+
+          const timeText =
+            formatYangonTime(now);
+
+          /*
+           * User ရေးထားတဲ့အစဉ်အတိုင်း
+           * Item တစ်ခုကို တစ်ကြောင်းစီပြမယ်။
+           */
+          const reportLines =
+            bet.items
+              .map((item) => {
+                return (
+                  `🔹 ${item.label} ` +
+                  `(${item.count} ကွက်) = ` +
+                  `${formatMoney(
+                    item.totalAmount
+                  )}`
+                );
+              })
+              .join("\n");
+
+          const grandTotal =
+            bet.grandTotal ??
+            bet.totalAmount ??
+            0;
+
+          const report =
+`📝 2D REPORT
+🆔 ID : ${reportId}
+📅 ရက်စွဲ : ${dateText}
+⏰ အချိန် : ${timeText}
+
+👤 ထိုးသူ : ${displayName}
+━━━━━━━━━━━━━━━━━━━━━━
+${reportLines}
+━━━━━━━━━━━━━━━━━━━━━━
+💵 စုစုပေါင်း : ${formatMoney(
+            grandTotal
+          )} ကျပ်
+
+🏛 🍀 ဂဏန်းများ ပြန်စစ်ပါ 🍀`;
+
+          await sendLongMessage(
             env.BOT_TOKEN,
             chatId,
-`📋 NEW ZEALAND 2D REPORT
-👤 ထိုးသူ : ${displayName}
-━━━━━━━━━━━━━━━━━━
-🔹 ${betLabel} (${bet.count} ကွက်) = ${formatMoney(
-              bet.totalAmount
-            )}
-━━━━━━━━━━━━━━━━━━
-💵 စုစုပေါင်း : ${formatMoney(
-              bet.totalAmount
-            )} ကျပ်
-
-🍀 ဂဏန်းများ ပြန်စစ်ပေးပါ 🍀`
+            report
           );
 
           /*
-           * Transaction သိမ်းမယ်။
-           * Table မရှိလျှင် Bot မပျက်စေရန် catch သီးခြားထားသည်။
+           * Transaction သိမ်းခြင်း
            */
           try {
             await env.DB.prepare(`
@@ -665,8 +810,8 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
               .bind(
                 chatId,
                 originalText,
-                bet.totalAmount,
-                new Date().toISOString()
+                grandTotal,
+                now.toISOString()
               )
               .run();
           } catch (databaseError) {
@@ -683,16 +828,17 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
 
 အသုံးပြုပုံ
 
-12 500
-12R 500
-12r 500
-12® 500
-12Ⓡ 500
-12 R 500
-123 ခွေ 500
-123 အခွေ 500
-123 ခွေပူး 500
-123 အခွေပူး 500
+67R 500
+67R 78R 90R 500
+67-78-90 R 500
+60147 အခွေ 500
+60147 အခွေပူး 500
+အပူး 500
+ပါဝါ 500
+စုံမ 500
+1/7 ထိပ် 500
+8/9 ပါတ် 500
+67/12345890 R 500
 
 အမှား : ${error.message}`
           );
@@ -700,10 +846,14 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
 
         return new Response("OK");
       } catch (error) {
-        console.error("Webhook error:", error);
+        console.error(
+          "Webhook error:",
+          error
+        );
 
         return new Response(
-          error.stack || error.toString(),
+          error.stack ||
+            error.toString(),
           {
             status: 500
           }
@@ -711,23 +861,28 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
       }
     }
 
-    return new Response("Not Found", {
-      status: 404
-    });
+    return new Response(
+      "Not Found",
+      {
+        status: 404
+      }
+    );
   }
 };
 
 /*
- * Admin ID စစ်ခြင်း
- *
- * Cloudflare ADMIN_ID ရှိရင် အဲဒါသုံးမယ်။
- * မရှိရင် DEFAULT_ADMIN_ID ကိုသုံးမယ်။
+ * =========================================
+ * ADMIN ID
+ * =========================================
  */
 function getAdminId(env) {
-  const configuredId = Number(env.ADMIN_ID);
+  const configuredId =
+    Number(env.ADMIN_ID);
 
   if (
-    Number.isSafeInteger(configuredId) &&
+    Number.isSafeInteger(
+      configuredId
+    ) &&
     configuredId > 0
   ) {
     return configuredId;
@@ -736,12 +891,10 @@ function getAdminId(env) {
   return DEFAULT_ADMIN_ID;
 }
 
-function isAdminUser(userId, env) {
-  return Number(userId) === getAdminId(env);
-}
-
 /*
- * /start@BotUsername ကို /start ပြောင်းပေးခြင်း
+ * =========================================
+ * COMMAND NORMALIZER
+ * =========================================
  */
 function normalizeCommand(text) {
   return String(text)
@@ -752,57 +905,187 @@ function normalizeCommand(text) {
     );
 }
 
+/*
+ * =========================================
+ * PLAN NAME
+ * =========================================
+ */
 function getPlanName(days) {
-  if (days === 30) return "Silver — 30 Days";
-  if (days === 90) return "Gold — 90 Days";
-  if (days === 365) return "Platinum — 365 Days";
+  if (days === 30) {
+    return "Silver — 30 Days";
+  }
+
+  if (days === 90) {
+    return "Gold — 90 Days";
+  }
+
+  if (days === 365) {
+    return "Platinum — 365 Days";
+  }
 
   return `${days} Days`;
 }
 
-function removeLastAmount(text) {
-  return String(text)
-    .trim()
-    .replace(/\s+[\d,]+\s*$/, "")
-    .replace(/\s+/g, " ");
-}
-
+/*
+ * =========================================
+ * MONEY FORMAT
+ * =========================================
+ */
 function formatMoney(amount) {
-  return Number(amount || 0).toLocaleString(
-    "en-US"
-  );
+  return Number(
+    amount || 0
+  ).toLocaleString("en-US");
 }
 
+/*
+ * =========================================
+ * DATE FORMAT
+ * =========================================
+ */
 function formatDate(value) {
   const date =
     value instanceof Date
       ? value
       : new Date(value);
 
-  if (Number.isNaN(date.getTime())) {
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
     return "မသိရှိပါ";
   }
 
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Asia/Yangon",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(date);
+  return new Intl.DateTimeFormat(
+    "en-GB",
+    {
+      timeZone: "Asia/Yangon",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }
+  ).format(date);
 }
 
-function jsonResponse(data, status = 200) {
+/*
+ * =========================================
+ * YANGON REPORT DATE
+ * =========================================
+ */
+function formatYangonDate(value) {
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(value);
+
+  return new Intl.DateTimeFormat(
+    "en-GB",
+    {
+      timeZone: "Asia/Yangon",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric"
+    }
+  ).format(date);
+}
+
+/*
+ * =========================================
+ * YANGON REPORT TIME
+ * =========================================
+ */
+function formatYangonTime(value) {
+  const date =
+    value instanceof Date
+      ? value
+      : new Date(value);
+
+  return new Intl.DateTimeFormat(
+    "en-US",
+    {
+      timeZone: "Asia/Yangon",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true
+    }
+  ).format(date);
+}
+
+/*
+ * =========================================
+ * REPORT ID
+ *
+ * NZ000001
+ * NZ000002
+ * =========================================
+ */
+async function getNextReportId(db) {
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS report_sequence (
+      name TEXT PRIMARY KEY,
+      value INTEGER NOT NULL DEFAULT 0
+    )
+  `).run();
+
+  await db.prepare(`
+    INSERT OR IGNORE INTO report_sequence
+    (
+      name,
+      value
+    )
+    VALUES
+    (
+      '2d_report',
+      0
+    )
+  `).run();
+
+  await db.prepare(`
+    UPDATE report_sequence
+    SET value = value + 1
+    WHERE name = '2d_report'
+  `).run();
+
+  const row = await db.prepare(`
+    SELECT value
+    FROM report_sequence
+    WHERE name = '2d_report'
+  `).first();
+
+  const sequenceNumber =
+    Number(row?.value || 1);
+
+  return `NZ${String(
+    sequenceNumber
+  ).padStart(6, "0")}`;
+}
+
+/*
+ * =========================================
+ * JSON RESPONSE
+ * =========================================
+ */
+function jsonResponse(
+  data,
+  status = 200
+) {
   return new Response(
     JSON.stringify(data),
     {
       status,
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type":
+          "application/json"
       }
     }
   );
 }
 
+/*
+ * =========================================
+ * LONG TELEGRAM MESSAGE
+ * =========================================
+ */
 async function sendLongMessage(
   token,
   chatId,
@@ -818,18 +1101,28 @@ async function sendLongMessage(
     await sendMessage(
       token,
       chatId,
-      text.slice(index, index + maxLength)
+      text.slice(
+        index,
+        index + maxLength
+      )
     );
   }
 }
 
+/*
+ * =========================================
+ * TELEGRAM SEND MESSAGE
+ * =========================================
+ */
 async function sendMessage(
   token,
   chatId,
   text
 ) {
   if (!token) {
-    throw new Error("BOT_TOKEN မရှိပါ။");
+    throw new Error(
+      "BOT_TOKEN မရှိပါ။"
+    );
   }
 
   const response = await fetch(
@@ -837,7 +1130,8 @@ async function sendMessage(
     {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type":
+          "application/json"
       },
       body: JSON.stringify({
         chat_id: chatId,
@@ -847,7 +1141,8 @@ async function sendMessage(
   );
 
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText =
+      await response.text();
 
     throw new Error(
       `Telegram sendMessage failed: ${errorText}`
@@ -855,4 +1150,4 @@ async function sendMessage(
   }
 
   return response;
-      }
+              }

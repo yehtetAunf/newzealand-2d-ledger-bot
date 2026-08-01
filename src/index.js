@@ -738,26 +738,15 @@ Fixed Rules
            * Count + Amount + Actual Numbers ပြမယ်။
            */
           const reportLines =
-            bet.items
-              .map((item) => {
-                const numberText =
-                  Array.isArray(
-                    item.numbers
-                  ) &&
-                  item.numbers.length > 0
-                    ? `\n🔢 ${item.numbers.join(" ")}`
-                    : "";
-
-                return (
-                  `🔹 ${item.label} ` +
-                  `(${item.count} ကွက်) = ` +
-                  `${formatMoney(
-                    item.totalAmount
-                  )}` +
-                  numberText
-                );
-              })
-              .join("\n\n");
+  bet.items
+    .map((item) => {
+      return (
+        `🔹 ${item.label} ` +
+        `(${item.count} ကွက်) = ` +
+        `${formatMoney(item.totalAmount)}`
+      );
+    })
+    .join("\n");
 
           const grandTotal =
             bet.grandTotal ??

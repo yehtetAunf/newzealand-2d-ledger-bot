@@ -1,5 +1,21 @@
 import { parseBetMessage } from "./parser.js";
 
+import {
+  getUser,
+  createUser
+} from "./database.js";
+
+import {
+  hasAccess
+} from "./license.js";
+
+import {
+  isAdmin,
+  approveUser,
+  banUser,
+  listUsers
+} from "./admin.js";
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -39,14 +55,19 @@ export default {
         }
 
         if (text === "/start") {
-          await createUsersTable(env);
+          let user = await getUser(env.DB, chatId);
 
-          await saveUser(env, {
-            chatId,
-            username: from.username || "",
-            firstName: from.first_name || ""
-          });
+if (!user) {
+  await createUser(
+    env.DB,
+    chatId,
+    from.username || "",
+    from.first_name || ""
+  );
 
+  user = await getUser(env.DB, chatId);
+}
+        }
           await sendMessage(
             env.BOT_TOKEN,
             chatId,

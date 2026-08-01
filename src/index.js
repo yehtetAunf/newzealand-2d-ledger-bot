@@ -94,15 +94,14 @@ export default {
             await sendMessage(
   env.BOT_TOKEN,
   chatId,
-`📋 REPORT
+`📋 NEW ZEALAND 2D REPORT
+👤 ထိုးသူ : ${displayName}
+━━━━━━━━━━━━━━━━━━
+🔹 ${betLabel} (${bet.count} ကွက်) = ${formatMoney(bet.totalAmount)}
+━━━━━━━━━━━━━━━━━━
+💵 စုစုပေါင်း : ${formatMoney(bet.totalAmount)} ကျပ်
 
-👤 User : ${displayName}
-🆔 Chat ID : ${chatId}
-
-🔹 ${betLabel} (${bet.count} ကွက်)
-💰 ထိုးငွေ : ${formatMoney(bet.totalAmount)} ကျပ်
-
-💵 Total : ${formatMoney(bet.totalAmount)} ကျပ်`
+🍀 ဂဏန်းများ ပြန်စစ်ပေးပါ 🍀`
 );
 
           } catch (error) {

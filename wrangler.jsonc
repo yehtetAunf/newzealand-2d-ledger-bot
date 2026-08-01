@@ -16,8 +16,9 @@
     }
   ],
 
-  "vars": {
-    "BOT_NAME": "New Zealand 2D Ledger Bot",
-    "TIMEZONE": "Asia/Yangon"
-  }
+"vars": {
+  "ADMIN_ID": "8840114917",
+  "BOT_NAME": "New Zealand 2D Ledger Bot",
+  "TIMEZONE": "Asia/Yangon"
+}
 }

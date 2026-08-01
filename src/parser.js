@@ -573,19 +573,20 @@ function createKhwayItem(
   const includeDoubles =
     /ပူး$/.test(keyword);
 
-  const result = countKhway(
-    digits,
-    includeDoubles
-  );
+  const result = expandKhway(
+  digits,
+  includeDoubles
+);
 
   return createBetItem({
-    label,
-    rule: includeDoubles
-      ? "khway_double"
-      : "khway",
-    count: result.count,
-    amount
-  });
+  label,
+  rule: includeDoubles
+    ? "khway_double"
+    : "khway",
+  numbers: result.numbers,
+  count: result.numbers.length,
+  amount
+});
 }
 
 /**

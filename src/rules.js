@@ -31,12 +31,18 @@ const FIXED_RULE_COUNTS = Object.freeze({
   အပူးစုံ: 10,
   ပူးစုံ: 10,
 
+  စုံပူး: 5,
+  မပူး: 5,
+
   ပါဝါ: 10,
 
   နက္ခတ်: 10,
   နခတ်: 10,
 
   ညီကို: 20,
+
+  ဆယ်ပြည့်: 20,
+  ဆယ်ပြည့်: 20,
 
   စုံစုံ: 25,
   မမ: 25,
@@ -543,7 +549,13 @@ export function normalizeFixedRuleName(
   ) {
     return "အပူး";
   }
+if (value === "စုံပူး") {
+  return "စုံပူး";
+}
 
+if (value === "မပူး") {
+  return "မပူး";
+}
   if (value === "ပါဝါ") {
     return "ပါဝါ";
   }
@@ -554,7 +566,12 @@ export function normalizeFixedRuleName(
   ) {
     return "နက္ခတ်";
   }
-
+if (
+  value === "ဆယ်ပြည့်" ||
+  value === "ဆယ်ပြည့်"
+) {
+  return "ဆယ်ပြည့်";
+}
   if (value === "ညီကို") {
     return "ညီကို";
   }
@@ -1262,7 +1279,192 @@ export const RULE_CONFIG =
       reverseMultiplier: 2
     })
   });
+/*
+ * =========================================
+ * Special Rule Actual 2D Numbers
+ * =========================================
+ */
 
+export const SPECIAL_RULE_NUMBERS = Object.freeze({
+  "အပူး": Object.freeze([
+    "00", "11", "22", "33", "44",
+    "55", "66", "77", "88", "99"
+  ]),
+
+  "စုံပူး": Object.freeze([
+    "00", "22", "44", "66", "88"
+  ]),
+
+  "မပူး": Object.freeze([
+    "11", "33", "55", "77", "99"
+  ]),
+
+  "ပါဝါ": Object.freeze([
+    "05", "50", "16", "61", "27",
+    "72", "38", "83", "49", "94"
+  ]),
+
+  "နက္ခတ်": Object.freeze([
+    "07", "70", "18", "81", "24",
+    "42", "35", "53", "69", "96"
+  ]),
+
+  "ညီကို": Object.freeze([
+    "01", "12", "23", "34", "45",
+    "56", "67", "78", "89", "90",
+    "10", "21", "32", "43", "54",
+    "65", "76", "87", "98", "09"
+  ]),
+
+  /*
+   * ဆယ်ပြည့် — ® ပါဝင်ပြီး 20 ကွက်
+   */
+  "ဆယ်ပြည့်": Object.freeze([
+    "00", "19", "91", "28", "82",
+    "37", "73", "46", "64", "55",
+    "10", "18", "27", "36", "45",
+    "54", "63", "72", "81", "90"
+  ]),
+
+  "မမ": Object.freeze([
+    "11", "13", "15", "17", "19",
+    "31", "33", "35", "37", "39",
+    "51", "53", "55", "57", "59",
+    "71", "73", "75", "77", "79",
+    "91", "93", "95", "97", "99"
+  ]),
+
+  "စုံစုံ": Object.freeze([
+    "00", "02", "04", "06", "08",
+    "20", "22", "24", "26", "28",
+    "40", "42", "44", "46", "48",
+    "60", "62", "64", "66", "68",
+    "80", "82", "84", "86", "88"
+  ]),
+
+  "စုံမ": Object.freeze([
+    "01", "03", "05", "07", "09",
+    "21", "23", "25", "27", "29",
+    "41", "43", "45", "47", "49",
+    "61", "63", "65", "67", "69",
+    "81", "83", "85", "87", "89"
+  ]),
+
+  "မစုံ": Object.freeze([
+    "10", "12", "14", "16", "18",
+    "30", "32", "34", "36", "38",
+    "50", "52", "54", "56", "58",
+    "70", "72", "74", "76", "78",
+    "90", "92", "94", "96", "98"
+  ])
+});
+
+/*
+ * Special Rule အမည်ကို Standard Name ပြောင်းမယ်။
+ */
+export function normalizeSpecialRuleName(ruleName) {
+  const value = String(ruleName ?? "")
+    .trim()
+    .replace(/\s+/g, "");
+
+  if (
+    value === "အပူး" ||
+    value === "အပူးစုံ" ||
+    value === "ပူးစုံ"
+  ) {
+    return "အပူး";
+  }
+
+  if (value === "စုံပူး") {
+    return "စုံပူး";
+  }
+
+  if (value === "မပူး") {
+    return "မပူး";
+  }
+
+  if (value === "ပါဝါ") {
+    return "ပါဝါ";
+  }
+
+  if (
+    value === "နက္ခတ်" ||
+    value === "နခတ်"
+  ) {
+    return "နက္ခတ်";
+  }
+
+  if (value === "ညီကို") {
+    return "ညီကို";
+  }
+
+  if (
+    value === "ဆယ်ပြည့်" ||
+    value === "ဆယ်ပြည့်"
+  ) {
+    return "ဆယ်ပြည့်";
+  }
+
+  if (value === "မမ") {
+    return "မမ";
+  }
+
+  if (value === "စုံစုံ") {
+    return "စုံစုံ";
+  }
+
+  if (value === "စုံမ") {
+    return "စုံမ";
+  }
+
+  if (value === "မစုံ") {
+    return "မစုံ";
+  }
+
+  return null;
+}
+
+/*
+ * Special Rule ရဲ့ Actual 2D Numbers ပြန်ပေးမယ်။
+ */
+export function getSpecialRuleNumbers(ruleName) {
+  const normalizedRule =
+    normalizeSpecialRuleName(ruleName);
+
+  if (!normalizedRule) {
+    throw new Error(
+      `မသိရှိသော Special Rule: ${ruleName}`
+    );
+  }
+
+  const numbers =
+    SPECIAL_RULE_NUMBERS[normalizedRule];
+
+  if (!numbers) {
+    throw new Error(
+      `${normalizedRule} Rule ရဲ့ ဂဏန်းများ မတွေ့ပါ။`
+    );
+  }
+
+  return [...numbers];
+}
+
+/*
+ * Special Rule Result အပြည့်အစုံ ပြန်ပေးမယ်။
+ */
+export function expandSpecialRule(ruleName) {
+  const normalizedRule =
+    normalizeSpecialRuleName(ruleName);
+
+  const numbers =
+    getSpecialRuleNumbers(normalizedRule);
+
+  return {
+    rule: normalizedRule,
+    numbers,
+    count: numbers.length
+  };
+}
 /**
  * =========================================
  * END OF FILE

@@ -8,7 +8,7 @@ import {
 import { hasAccess } from "./license.js";
 
 import {
-  isAdminUser,
+  isAdmin,
   approveUser,
   banUser,
   listUsers
@@ -71,7 +71,7 @@ export default {
          * /command ပုံစံအဖြစ် ပြောင်းမယ်။
          */
         const text = normalizeCommand(originalText);
-        const admin = isAdminUser(userId, env);
+        const admin = isAdmin(chatId, env);
 
         /*
          * =========================================

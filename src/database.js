@@ -537,3 +537,32 @@ export async function resetNumberTotals(
     )
     .run();
       }
+export async function addBetItemsToNumberTotals(db, items) {
+  if (!Array.isArray(items)) return;
+
+  await db.prepare(`
+    CREATE TABLE IF NOT EXISTS number_totals (
+      number TEXT PRIMARY KEY,
+      total_amount INTEGER NOT NULL DEFAULT 0
+    )
+  `).run();
+
+  for (const item of items) {
+    if (!Array.isArray(item.numbers)) continue;
+
+    const amountPerNumber =
+      Math.floor(item.totalAmount / item.count);
+
+    for (const number of item.numbers) {
+      await db.prepare(`
+        INSERT INTO number_totals(number, total_amount)
+        VALUES(?, ?)
+        ON CONFLICT(number)
+        DO UPDATE SET
+          total_amount = total_amount + excluded.total_amount
+      `)
+      .bind(number, amountPerNumber)
+      .run();
+    }
+  }
+}

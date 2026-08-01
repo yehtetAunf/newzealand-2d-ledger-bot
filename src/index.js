@@ -67,11 +67,23 @@ if (!user) {
 
   user = await getUser(env.DB, chatId);
 }
-        }
-          await sendMessage(
-            env.BOT_TOKEN,
-            chatId,
-`👋 Welcome ${from.first_name || ""}
+
+const access = hasAccess(user);
+
+if (!access.ok) {
+  await sendMessage(
+    env.BOT_TOKEN,
+    chatId,
+    access.message
+  );
+
+  return new Response("OK");
+}
+
+await sendMessage(
+  env.BOT_TOKEN,
+  chatId,
+  `👋 Welcome ${from.first_name || ""}
 
 ✅ New Zealand 2D Ledger Bot
 
@@ -81,7 +93,7 @@ if (!user) {
 
 /start
 /help`
-          );
+);
 
         } else if (text === "/help") {
           await sendMessage(

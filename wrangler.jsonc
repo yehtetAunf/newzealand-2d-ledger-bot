@@ -8,22 +8,16 @@
     "enabled": true
   },
 
-"d1_databases": [
-  {
-    "binding": "DB",
-    "database_name": "ledger-db",
-    "database_id": "862438dc-abcc-44b3-b5ce-24bbd8c8fa4b"
-  }
-],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ledger-db",
+      "database_id": "862438dc-abcc-44b3-b5ce-24bbd8c8fa4b"
+    }
+  ],
 
-"vars": {
-  "BOT_NAME": "New Zealand 2D Ledger Bot",
-  "TIMEZONE": "Asia/Yangon"
-},
-
-  "triggers": {
-    "crons": [
-      "* * * * *"
-    ]
+  "vars": {
+    "BOT_NAME": "New Zealand 2D Ledger Bot",
+    "TIMEZONE": "Asia/Yangon"
   }
 }

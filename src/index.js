@@ -92,21 +92,18 @@ export default {
             const betLabel = removeLastAmount(text);
 
             await sendMessage(
-              env.BOT_TOKEN,
-              chatId,
-`📝 REPORT
+  env.BOT_TOKEN,
+  chatId,
+`📋 REPORT
 
-👤 ထိုးသူ : ${displayName}
-━━━━━━━━━━━━━━━━━━
+👤 User : ${displayName}
+🆔 Chat ID : ${chatId}
 
 🔹 ${betLabel} (${bet.count} ကွက်)
 💰 ထိုးငွေ : ${formatMoney(bet.totalAmount)} ကျပ်
 
-━━━━━━━━━━━━━━━━━━
-💵 စုစုပေါင်း : ${formatMoney(bet.totalAmount)} ကျပ်
-
-🏛 🍀 ဂဏန်းများ ပြန်စစ်ပေးပါ 🍀`
-            );
+💵 Total : ${formatMoney(bet.totalAmount)} ကျပ်`
+);
 
           } catch (error) {
             await sendMessage(

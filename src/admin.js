@@ -1,5 +1,7 @@
 import { updateLicense, getUsers } from "./database.js";
 
+const DEFAULT_ADMIN_ID = 8840114917;
+
 export async function approveUser(db, chatId, plan, expiresAt) {
   return updateLicense(
     db,
@@ -25,5 +27,8 @@ export async function listUsers(db) {
 }
 
 export function isAdmin(chatId, env) {
-  return Number(chatId) === Number(env.ADMIN_ID);
+  const adminId =
+    Number(env.ADMIN_ID) || DEFAULT_ADMIN_ID;
+
+  return Number(chatId) === adminId;
 }

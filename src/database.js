@@ -22,7 +22,7 @@ export async function getUser(
     .bind(chatId)
     .all();
 
-  return results.length
+  return results.length > 0
     ? results[0]
     : null;
 }
@@ -144,17 +144,8 @@ export async function ensureNumberTotals(
 
 /*
  * =========================================
- * BET NUMBERS SAVE
+ * BET ITEMS TO NUMBER TOTALS
  * =========================================
- *
- * Parser ကပြန်ပေးတဲ့ items ကို
- * number_totals ထဲ ပေါင်းသိမ်းမယ်။
- *
- * ဥပမာ:
- * 67R 500
- *
- * 67 = +500
- * 76 = +500
  */
 
 export async function addBetItemsToNumberTotals(
@@ -175,26 +166,25 @@ export async function addBetItemsToNumberTotals(
   for (const item of items) {
     if (
       !item ||
-      !Array.isArray(item.numbers)
+      !Array.isArray(item.numbers) ||
+      item.numbers.length === 0
     ) {
       continue;
     }
 
-    const count =
-      Number(item.count || 0);
+    const count = Number(
+      item.count || item.numbers.length
+    );
 
-    const totalAmount =
-      Number(item.totalAmount || 0);
-
-    const amountPerNumber =
-      Number(
-        item.amountPerNumber ??
-        (
-          count > 0
-            ? totalAmount / count
-            : 0
-        )
-      );
+    const amountPerNumber = Number(
+      item.amountPerNumber ??
+      (
+        count > 0
+          ? Number(item.totalAmount || 0) /
+            count
+          : 0
+      )
+    );
 
     if (
       !Number.isFinite(amountPerNumber) ||
@@ -222,7 +212,7 @@ export async function addBetItemsToNumberTotals(
             updated_at = ?
           WHERE number = ?
         `).bind(
-          amountPerNumber,
+          Math.round(amountPerNumber),
           now,
           numberText
         )
@@ -241,20 +231,17 @@ export async function addBetItemsToNumberTotals(
 
   return {
     success: true,
-    updatedCount:
-      statements.length
+    updatedCount: statements.length
   };
 }
 
 /*
  * =========================================
- * 00–99 REPORT
+ * GET ALL NUMBER TOTALS
  * =========================================
  */
 
-export async function getNumberTotals(
-  db
-) {
+export async function getNumberTotals(db) {
   await ensureNumberTotals(db);
 
   const { results } = await db
@@ -273,7 +260,7 @@ export async function getNumberTotals(
 
 /*
  * =========================================
- * NUMBER တစ်လုံး REPORT
+ * GET ONE NUMBER TOTAL
  * =========================================
  */
 
@@ -284,7 +271,9 @@ export async function getNumberTotal(
   await ensureNumberTotals(db);
 
   const numberText =
-    String(number || "").padStart(2, "0");
+    String(number ?? "")
+      .trim()
+      .padStart(2, "0");
 
   if (!/^\d{2}$/.test(numberText)) {
     throw new Error(
@@ -307,7 +296,7 @@ export async function getNumberTotal(
 
 /*
  * =========================================
- * မထိုးရသေးသော ဂဏန်းများ
+ * UNTOUCHED NUMBERS
  * =========================================
  */
 
@@ -332,11 +321,45 @@ export async function getUntouchedNumbers(
 
 /*
  * =========================================
- * သတ်မှတ် Amount အောက်
+ * TOP NUMBERS
  * =========================================
- *
- * ဥပမာ:
- * 1000 အောက်
+ */
+
+export async function getTopNumbers(
+  db,
+  limit = 10
+) {
+  await ensureNumberTotals(db);
+
+  const parsedLimit = Number(limit);
+
+  const safeLimit =
+    Number.isInteger(parsedLimit) &&
+    parsedLimit > 0
+      ? Math.min(parsedLimit, 100)
+      : 10;
+
+  const { results } = await db
+    .prepare(`
+      SELECT
+        number,
+        total_amount
+      FROM number_totals
+      ORDER BY
+        total_amount DESC,
+        number ASC
+      LIMIT ?
+    `)
+    .bind(safeLimit)
+    .all();
+
+  return results;
+}
+
+/*
+ * =========================================
+ * NUMBERS BELOW AMOUNT
+ * =========================================
  */
 
 export async function getNumbersBelowAmount(
@@ -375,11 +398,8 @@ export async function getNumbersBelowAmount(
 
 /*
  * =========================================
- * သတ်မှတ် Amount အထက်
+ * NUMBERS ABOVE AMOUNT
  * =========================================
- *
- * ဥပမာ:
- * 5000 အထက်
  */
 
 export async function getNumbersAboveAmount(
@@ -418,42 +438,7 @@ export async function getNumbersAboveAmount(
 
 /*
  * =========================================
- * ထိုးငွေအများဆုံး Numbers
- * =========================================
- */
-
-export async function getTopNumbers(
-  db,
-  limit = 10
-) {
-  await ensureNumberTotals(db);
-
-  const safeLimit =
-    Number.isInteger(Number(limit)) &&
-    Number(limit) > 0
-      ? Math.min(Number(limit), 100)
-      : 10;
-
-  const { results } = await db
-    .prepare(`
-      SELECT
-        number,
-        total_amount
-      FROM number_totals
-      ORDER BY
-        total_amount DESC,
-        number ASC
-      LIMIT ?
-    `)
-    .bind(safeLimit)
-    .all();
-
-  return results;
-}
-
-/*
- * =========================================
- * စုစုပေါင်းရောင်းအား
+ * TOTAL SALES
  * =========================================
  */
 
@@ -476,7 +461,7 @@ export async function getTotalSales(db) {
 
 /*
  * =========================================
- * User တစ်ယောက်ချင်း ရောင်းအား
+ * USER SALES
  * =========================================
  */
 
@@ -515,9 +500,6 @@ export async function getUserSales(
  * =========================================
  * RESET NUMBER TOTALS
  * =========================================
- *
- * နောက်ပိုင်း Admin command ကနေ
- * အသုံးပြုရန်။
  */
 
 export async function resetNumberTotals(
@@ -536,33 +518,4 @@ export async function resetNumberTotals(
       new Date().toISOString()
     )
     .run();
-      }
-export async function addBetItemsToNumberTotals(db, items) {
-  if (!Array.isArray(items)) return;
-
-  await db.prepare(`
-    CREATE TABLE IF NOT EXISTS number_totals (
-      number TEXT PRIMARY KEY,
-      total_amount INTEGER NOT NULL DEFAULT 0
-    )
-  `).run();
-
-  for (const item of items) {
-    if (!Array.isArray(item.numbers)) continue;
-
-    const amountPerNumber =
-      Math.floor(item.totalAmount / item.count);
-
-    for (const number of item.numbers) {
-      await db.prepare(`
-        INSERT INTO number_totals(number, total_amount)
-        VALUES(?, ?)
-        ON CONFLICT(number)
-        DO UPDATE SET
-          total_amount = total_amount + excluded.total_amount
-      `)
-      .bind(number, amountPerNumber)
-      .run();
-    }
   }
-}

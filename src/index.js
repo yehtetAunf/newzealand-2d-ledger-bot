@@ -39,7 +39,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "3.0.0"
+        version: "3.1.0"
       });
     }
 
@@ -71,10 +71,6 @@ export default {
           return new Response("OK");
         }
 
-        /*
-         * /start@BotUsername
-         * ပုံစံကို /start အဖြစ်ပြောင်းမယ်။
-         */
         const text =
           normalizeCommand(originalText);
 
@@ -151,9 +147,6 @@ export default {
         /*
          * =========================================
          * ADMIN COMMAND — /approve
-         *
-         * /approve CHAT_ID 30
-         * /approve CHAT_ID forever
          * =========================================
          */
         if (text.startsWith("/approve")) {
@@ -529,10 +522,6 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
             );
           }
 
-          /*
-           * Admin ကို License မစစ်ဘဲ
-           * အမြဲအသုံးပြုခွင့်ပေးမယ်။
-           */
           if (admin) {
             await sendMessage(
               env.BOT_TOKEN,
@@ -572,10 +561,6 @@ ${access.message}
 Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
             );
 
-            /*
-             * User အသစ်ဖြစ်မှ
-             * Admin ထံ Request ပို့မယ်။
-             */
             if (isNewUser) {
               try {
                 await sendMessage(
@@ -670,9 +655,12 @@ Direct / Reverse
 
 Fixed Rules
 အပူး 500
+စုံပူး 500
+မပူး 500
 ပါဝါ 500
 နက္ခတ် 500
 ညီကို 500
+ဆယ်ပြည့် 500
 စုံစုံ 500
 မမ 500
 စုံမ 500
@@ -732,10 +720,6 @@ Fixed Rules
             from.username ||
             "New Zealand 2D";
 
-          /*
-           * Report ID:
-           * NZ000001, NZ000002...
-           */
           const reportId =
             await getNextReportId(
               env.DB
@@ -750,21 +734,30 @@ Fixed Rules
             formatYangonTime(now);
 
           /*
-           * User ရေးထားတဲ့အစဉ်အတိုင်း
-           * Item တစ်ခုကို တစ်ကြောင်းစီပြမယ်။
+           * Item တစ်ခုစီအတွက်
+           * Count + Amount + Actual Numbers ပြမယ်။
            */
           const reportLines =
             bet.items
               .map((item) => {
+                const numberText =
+                  Array.isArray(
+                    item.numbers
+                  ) &&
+                  item.numbers.length > 0
+                    ? `\n🔢 ${item.numbers.join(" ")}`
+                    : "";
+
                 return (
                   `🔹 ${item.label} ` +
                   `(${item.count} ကွက်) = ` +
                   `${formatMoney(
                     item.totalAmount
-                  )}`
+                  )}` +
+                  numberText
                 );
               })
-              .join("\n");
+              .join("\n\n");
 
           const grandTotal =
             bet.grandTotal ??
@@ -834,6 +827,9 @@ ${reportLines}
 60147 အခွေ 500
 60147 အခွေပူး 500
 အပူး 500
+စုံပူး 500
+မပူး 500
+ဆယ်ပြည့် 500
 ပါဝါ 500
 စုံမ 500
 1/7 ထိပ် 500
@@ -870,11 +866,6 @@ ${reportLines}
   }
 };
 
-/*
- * =========================================
- * ADMIN ID
- * =========================================
- */
 function getAdminId(env) {
   const configuredId =
     Number(env.ADMIN_ID);
@@ -891,11 +882,6 @@ function getAdminId(env) {
   return DEFAULT_ADMIN_ID;
 }
 
-/*
- * =========================================
- * COMMAND NORMALIZER
- * =========================================
- */
 function normalizeCommand(text) {
   return String(text)
     .trim()
@@ -905,11 +891,6 @@ function normalizeCommand(text) {
     );
 }
 
-/*
- * =========================================
- * PLAN NAME
- * =========================================
- */
 function getPlanName(days) {
   if (days === 30) {
     return "Silver — 30 Days";
@@ -926,22 +907,12 @@ function getPlanName(days) {
   return `${days} Days`;
 }
 
-/*
- * =========================================
- * MONEY FORMAT
- * =========================================
- */
 function formatMoney(amount) {
   return Number(
     amount || 0
   ).toLocaleString("en-US");
 }
 
-/*
- * =========================================
- * DATE FORMAT
- * =========================================
- */
 function formatDate(value) {
   const date =
     value instanceof Date
@@ -967,11 +938,6 @@ function formatDate(value) {
   ).format(date);
 }
 
-/*
- * =========================================
- * YANGON REPORT DATE
- * =========================================
- */
 function formatYangonDate(value) {
   const date =
     value instanceof Date
@@ -989,11 +955,6 @@ function formatYangonDate(value) {
   ).format(date);
 }
 
-/*
- * =========================================
- * YANGON REPORT TIME
- * =========================================
- */
 function formatYangonTime(value) {
   const date =
     value instanceof Date
@@ -1011,14 +972,6 @@ function formatYangonTime(value) {
   ).format(date);
 }
 
-/*
- * =========================================
- * REPORT ID
- *
- * NZ000001
- * NZ000002
- * =========================================
- */
 async function getNextReportId(db) {
   await db.prepare(`
     CREATE TABLE IF NOT EXISTS report_sequence (
@@ -1060,11 +1013,6 @@ async function getNextReportId(db) {
   ).padStart(6, "0")}`;
 }
 
-/*
- * =========================================
- * JSON RESPONSE
- * =========================================
- */
 function jsonResponse(
   data,
   status = 200
@@ -1081,11 +1029,6 @@ function jsonResponse(
   );
 }
 
-/*
- * =========================================
- * LONG TELEGRAM MESSAGE
- * =========================================
- */
 async function sendLongMessage(
   token,
   chatId,
@@ -1109,11 +1052,6 @@ async function sendLongMessage(
   }
 }
 
-/*
- * =========================================
- * TELEGRAM SEND MESSAGE
- * =========================================
- */
 async function sendMessage(
   token,
   chatId,
@@ -1150,4 +1088,4 @@ async function sendMessage(
   }
 
   return response;
-              }
+}

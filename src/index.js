@@ -3,7 +3,8 @@ import { parseBetMessage } from "./parser.js";
 import {
   getUser,
   createUser,
-  addBetItemsToNumberTotals
+  addBetItemsToNumberTotals,
+  getNumberTotals
 } from "./database.js";
 
 import { hasAccess } from "./license.js";
@@ -147,7 +148,25 @@ await addBetItemsToNumberTotals(
 );
           return new Response("OK");
         }
+if (text === "/ledger") {
+  const rows = await getNumberTotals(env.DB);
 
+  let msg = "📊 TODAY NUMBER LEDGER\n\n";
+
+  for (const row of rows) {
+    if (Number(row.total_amount) > 0) {
+      msg += `${row.number} = ${formatMoney(row.total_amount)}\n`;
+    }
+  }
+
+  await sendLongMessage(
+    env.BOT_TOKEN,
+    chatId,
+    msg
+  );
+
+  return new Response("OK");
+}
         /*
          * =========================================
          * ADMIN COMMAND — /approve

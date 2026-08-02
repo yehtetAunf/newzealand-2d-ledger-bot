@@ -1054,7 +1054,7 @@ Ledger Commands
                   item.amountPerNumber ??
                   (
                     Number(item.count) > 0
-                      ? Number(item.totalAmount || 0) /
+                      ? Number(item.totalAmount) /
                         Number(item.count)
                       : 0
                   );
@@ -1144,19 +1144,52 @@ ${reportLines}
             );
           }
         } catch (error) {
+          const errorMessage = String(
+            error?.message || ""
+          );
+
+          let reply;
+
+          if (
+            errorMessage.includes(
+              "ထိုးငွေ (Amount) မတွေ့ပါ"
+            ) ||
+            errorMessage.includes(
+              "နောက်ဆုံးတွင် ထိုးငွေထည့်ပါ"
+            )
+          ) {
+            reply =
+`❌ စာရင်းပုံစံ မမှန်ပါ။
+
+ထိုးငွေ (Amount) မတွေ့ပါ။
+
+ဥပမာ
+67-78-90 R 500`;
+          } else if (
+            errorMessage.includes(
+              "အကွက်အမျိုးအစား"
+            )
+          ) {
+            reply =
+`❌ စာရင်းပုံစံ မမှန်ပါ။
+
+အကွက်အမျိုးအစား (အခွေ/အခွေပူး) မပါပါ။
+
+ဥပမာ
+60147 အခွေ 500`;
+          } else {
+            reply =
+`❌ စာရင်းပုံစံ မမှန်ပါ။
+
+${errorMessage}
+
+အသုံးပြုပုံကြည့်ရန် /help ကိုနှိပ်ပါ။`;
+          }
+
           await sendMessage(
             env.BOT_TOKEN,
             chatId,
-`❌ စာရင်းပုံစံ မမှန်ပါ။
-
-အမှား : ${error.message}
-
-💡 ဥပမာ
-67R 500
-60147 အခွေ 500
-အပူး 500
-
-အသုံးပြုပုံအပြည့်အစုံကြည့်ရန် /help ကိုနှိပ်ပါ။`
+            reply
           );
         }
 

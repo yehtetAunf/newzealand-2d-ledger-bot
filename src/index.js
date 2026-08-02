@@ -12,7 +12,8 @@ import {
   getNumbersAboveAmount,
   getTotalSales,
   getUserSales,
-  resetNumberTotals
+  resetNumberTotals,
+  resetTransactions
 } from "./database.js";
 
 import { hasAccess } from "./license.js";
@@ -425,12 +426,13 @@ export default {
           }
 
           await resetNumberTotals(env.DB);
+await resetTransactions(env.DB);
 
-          await sendMessage(
-            env.BOT_TOKEN,
-            chatId,
-            "✅ Number Ledger ကို Reset လုပ်ပြီးပါပြီ။"
-          );
+await sendMessage(
+  env.BOT_TOKEN,
+  chatId,
+  "✅ Number Ledger ကို Reset လုပ်ပြီးပါပြီ"
+);
 
           return new Response("OK");
         }

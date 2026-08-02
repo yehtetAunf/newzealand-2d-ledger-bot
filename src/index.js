@@ -4,7 +4,15 @@ import {
   getUser,
   createUser,
   addBetItemsToNumberTotals,
-  getNumberTotals
+  getNumberTotals,
+  getNumberTotal,
+  getUntouchedNumbers,
+  getTopNumbers,
+  getNumbersBelowAmount,
+  getNumbersAboveAmount,
+  getTotalSales,
+  getUserSales,
+  resetNumberTotals
 } from "./database.js";
 
 import { hasAccess } from "./license.js";
@@ -16,21 +24,12 @@ import {
   listUsers
 } from "./admin.js";
 
-/*
- * Cloudflare ADMIN_ID မရှိခဲ့ရင်
- * ဒီ Telegram User ID ကို အသုံးပြုမယ်။
- */
 const DEFAULT_ADMIN_ID = 8840114917;
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
-    /*
-     * =========================================
-     * HEALTH CHECK
-     * =========================================
-     */
     if (
       request.method === "GET" &&
       url.pathname === "/"
@@ -41,15 +40,10 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "3.1.0"
+        version: "3.2.0"
       });
     }
 
-    /*
-     * =========================================
-     * TELEGRAM WEBHOOK
-     * =========================================
-     */
     if (
       request.method === "POST" &&
       url.pathname === "/webhook"
@@ -142,31 +136,305 @@ export default {
             chatId,
             report
           );
-await addBetItemsToNumberTotals(
-  env.DB,
-  bet.items
-);
+
           return new Response("OK");
         }
-if (text === "/ledger") {
-  const rows = await getNumberTotals(env.DB);
 
-  let msg = "📊 TODAY NUMBER LEDGER\n\n";
+        /*
+         * =========================================
+         * LEDGER COMMANDS
+         * =========================================
+         */
 
-  for (const row of rows) {
-    if (Number(row.total_amount) > 0) {
-      msg += `${row.number} = ${formatMoney(row.total_amount)}\n`;
-    }
-  }
+        if (text === "/ledger") {
+          const rows =
+            await getNumberTotals(env.DB);
 
-  await sendLongMessage(
-    env.BOT_TOKEN,
-    chatId,
-    msg
-  );
+          const activeRows = rows.filter(
+            (row) =>
+              Number(row.total_amount) > 0
+          );
 
-  return new Response("OK");
-}
+          const msg = activeRows.length
+            ? "📊 NUMBER LEDGER\n\n" +
+              activeRows
+                .map(
+                  (row) =>
+                    `${row.number} = ` +
+                    `${formatMoney(row.total_amount)}`
+                )
+                .join("\n")
+            : "📭 Ledger မှာ ထိုးထားသောဂဏန်း မရှိသေးပါ။";
+
+          await sendLongMessage(
+            env.BOT_TOKEN,
+            chatId,
+            msg
+          );
+
+          return new Response("OK");
+        }
+
+        if (text === "/untouched") {
+          const rows =
+            await getUntouchedNumbers(env.DB);
+
+          const msg = rows.length
+            ? "⭕ မထိုးရသေးသောဂဏန်းများ\n\n" +
+              rows
+                .map((row) => row.number)
+                .join(" ")
+            : "✅ 00 မှ 99 အထိ ဂဏန်းအားလုံး ထိုးပြီးပါပြီ။";
+
+          await sendLongMessage(
+            env.BOT_TOKEN,
+            chatId,
+            msg
+          );
+
+          return new Response("OK");
+        }
+
+        if (text.startsWith("/top")) {
+          const args = text.split(/\s+/);
+          const limit =
+            args[1] === undefined
+              ? 10
+              : Number(args[1]);
+
+          if (
+            !Number.isInteger(limit) ||
+            limit <= 0 ||
+            limit > 100
+          ) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              "အသုံးပြုပုံ\n/top\n/top 20"
+            );
+
+            return new Response("OK");
+          }
+
+          const rows =
+            await getTopNumbers(
+              env.DB,
+              limit
+            );
+
+          const msg = rows.length
+            ? `🏆 TOP ${limit} NUMBERS\n\n` +
+              rows
+                .map(
+                  (row, index) =>
+                    `${index + 1}. ` +
+                    `${row.number} = ` +
+                    `${formatMoney(row.total_amount)}`
+                )
+                .join("\n")
+            : "📭 ထိုးထားသောဂဏန်း မရှိသေးပါ။";
+
+          await sendLongMessage(
+            env.BOT_TOKEN,
+            chatId,
+            msg
+          );
+
+          return new Response("OK");
+        }
+
+        if (text.startsWith("/number")) {
+          const args = text.split(/\s+/);
+
+          if (
+            args.length !== 2 ||
+            !/^\d{1,2}$/.test(args[1])
+          ) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              "အသုံးပြုပုံ\n/number 67"
+            );
+
+            return new Response("OK");
+          }
+
+          const row =
+            await getNumberTotal(
+              env.DB,
+              args[1]
+            );
+
+          await sendMessage(
+            env.BOT_TOKEN,
+            chatId,
+            `🔢 ${row.number} = ` +
+            `${formatMoney(row.total_amount)} ကျပ်`
+          );
+
+          return new Response("OK");
+        }
+
+        if (text.startsWith("/below")) {
+          const args = text.split(/\s+/);
+          const amount = Number(
+            String(args[1] || "")
+              .replace(/,/g, "")
+          );
+
+          if (
+            args.length !== 2 ||
+            !Number.isFinite(amount) ||
+            amount < 0
+          ) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              "အသုံးပြုပုံ\n/below 5000"
+            );
+
+            return new Response("OK");
+          }
+
+          const rows =
+            await getNumbersBelowAmount(
+              env.DB,
+              amount
+            );
+
+          const msg = rows.length
+            ? `⬇️ ${formatMoney(amount)} အောက်\n\n` +
+              rows
+                .map(
+                  (row) =>
+                    `${row.number} = ` +
+                    `${formatMoney(row.total_amount)}`
+                )
+                .join("\n")
+            : `📭 ${formatMoney(amount)} အောက် ဂဏန်းမရှိပါ။`;
+
+          await sendLongMessage(
+            env.BOT_TOKEN,
+            chatId,
+            msg
+          );
+
+          return new Response("OK");
+        }
+
+        if (text.startsWith("/above")) {
+          const args = text.split(/\s+/);
+          const amount = Number(
+            String(args[1] || "")
+              .replace(/,/g, "")
+          );
+
+          if (
+            args.length !== 2 ||
+            !Number.isFinite(amount) ||
+            amount < 0
+          ) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              "အသုံးပြုပုံ\n/above 10000"
+            );
+
+            return new Response("OK");
+          }
+
+          const rows =
+            await getNumbersAboveAmount(
+              env.DB,
+              amount
+            );
+
+          const msg = rows.length
+            ? `⬆️ ${formatMoney(amount)} အထက်\n\n` +
+              rows
+                .map(
+                  (row) =>
+                    `${row.number} = ` +
+                    `${formatMoney(row.total_amount)}`
+                )
+                .join("\n")
+            : `📭 ${formatMoney(amount)} အထက် ဂဏန်းမရှိပါ။`;
+
+          await sendLongMessage(
+            env.BOT_TOKEN,
+            chatId,
+            msg
+          );
+
+          return new Response("OK");
+        }
+
+        if (text === "/sales") {
+          if (!admin) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              "⛔ /sales ကို Admin သာ အသုံးပြုနိုင်ပါသည်။"
+            );
+
+            return new Response("OK");
+          }
+
+          const total =
+            await getTotalSales(env.DB);
+
+          await sendMessage(
+            env.BOT_TOKEN,
+            chatId,
+            "💰 TOTAL SALES\n\n" +
+            `${formatMoney(total)} ကျပ်`
+          );
+
+          return new Response("OK");
+        }
+
+        if (text === "/mysales") {
+          const result =
+            await getUserSales(
+              env.DB,
+              chatId
+            );
+
+          await sendMessage(
+            env.BOT_TOKEN,
+            chatId,
+            "👤 MY SALES\n\n" +
+            `🧾 Transactions : ` +
+            `${result.transactionCount}\n` +
+            `💰 Total : ` +
+            `${formatMoney(result.totalSales)} ကျပ်`
+          );
+
+          return new Response("OK");
+        }
+
+        if (text === "/resetledger") {
+          if (!admin) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              "⛔ /resetledger ကို Admin သာ အသုံးပြုနိုင်ပါသည်။"
+            );
+
+            return new Response("OK");
+          }
+
+          await resetNumberTotals(env.DB);
+
+          await sendMessage(
+            env.BOT_TOKEN,
+            chatId,
+            "✅ Number Ledger ကို Reset လုပ်ပြီးပါပြီ။"
+          );
+
+          return new Response("OK");
+        }
+
         /*
          * =========================================
          * ADMIN COMMAND — /approve
@@ -560,9 +828,14 @@ Admin Commands
 /approve CHAT_ID forever
 /ban CHAT_ID
 /unban CHAT_ID
-
-ဥပမာ
-/approve 123456789 30`
+/ledger
+/untouched
+/top
+/number 67
+/below 5000
+/above 10000
+/sales
+/resetledger`
             );
 
             return new Response("OK");
@@ -628,7 +901,14 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
 အသုံးပြုနိုင်သော Commands
 
 /start
-/help`
+/help
+/ledger
+/untouched
+/top
+/number 67
+/below 5000
+/above 10000
+/mysales`
           );
 
           return new Response("OK");
@@ -678,12 +958,9 @@ Direct / Reverse
 
 Fixed Rules
 အပူး 500
-စုံပူး 500
-မပူး 500
 ပါဝါ 500
 နက္ခတ် 500
 ညီကို 500
-ဆယ်ပြည့် 500
 စုံစုံ 500
 မမ 500
 စုံမ 500
@@ -696,7 +973,17 @@ Fixed Rules
 
 ကပ်ဂဏန်း
 67/12345890 500
-67/12345890 R 500`
+67/12345890 R 500
+
+Ledger Commands
+/ledger
+/untouched
+/top
+/top 20
+/number 67
+/below 5000
+/above 10000
+/mysales`
           );
 
           return new Response("OK");
@@ -756,20 +1043,18 @@ Fixed Rules
           const timeText =
             formatYangonTime(now);
 
-          /*
-           * Item တစ်ခုစီအတွက်
-           * Count + Amount + Actual Numbers ပြမယ်။
-           */
           const reportLines =
-  bet.items
-    .map((item) => {
-      return (
-        `🔹 ${item.label} ` +
-        `(${item.count} ကွက်) = ` +
-        `${formatMoney(item.totalAmount)}`
-      );
-    })
-    .join("\n");
+            bet.items
+              .map((item) => {
+                return (
+                  `🔹 ${item.label} ` +
+                  `(${item.count} ကွက်) = ` +
+                  `${formatMoney(
+                    item.totalAmount
+                  )}`
+                );
+              })
+              .join("\n");
 
           const grandTotal =
             bet.grandTotal ??
@@ -793,19 +1078,23 @@ ${reportLines}
 🏛 🍀 ဂဏန်းများ ပြန်စစ်ပါ 🍀`;
 
           await sendLongMessage(
-  env.BOT_TOKEN,
-  chatId,
-  report
-);
+            env.BOT_TOKEN,
+            chatId,
+            report
+          );
 
-await addBetItemsToNumberTotals(
-  env.DB,
-  bet.items
-);
+          try {
+            await addBetItemsToNumberTotals(
+              env.DB,
+              bet.items
+            );
+          } catch (ledgerError) {
+            console.error(
+              "Number ledger save failed:",
+              ledgerError
+            );
+          }
 
-          /*
-           * Transaction သိမ်းခြင်း
-           */
           try {
             await env.DB.prepare(`
               INSERT INTO transactions
@@ -844,9 +1133,6 @@ await addBetItemsToNumberTotals(
 60147 အခွေ 500
 60147 အခွေပူး 500
 အပူး 500
-စုံပူး 500
-မပူး 500
-ဆယ်ပြည့် 500
 ပါဝါ 500
 စုံမ 500
 1/7 ထိပ် 500

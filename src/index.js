@@ -3,15 +3,8 @@ import { parseBetMessage } from "./parser.js";
 import {
   getUser,
   createUser,
-  updateLicense,
-
   getLicensedGroup,
   createLicensedGroup,
-  approveGroup,
-banGroup,
-unbanGroup,
-  getLicensedGroups,
-
   addBetItemsToNumberTotals,
   getNumberTotals,
   getNumberTotal,
@@ -22,7 +15,8 @@ unbanGroup,
   getTotalSales,
   getUserSales,
   resetNumberTotals,
-  resetTransactions
+  resetTransactions,
+  saveTransaction
 } from "./database.js";
 
 import { hasAccess } from "./license.js";
@@ -31,7 +25,11 @@ import {
   isAdmin,
   approveUser,
   banUser,
-  listUsers
+  listUsers,
+  approveGroup,
+  banGroup,
+  unbanGroup,
+  listGroups
 } from "./admin.js";
 
 const DEFAULT_ADMIN_ID = 8840114917;
@@ -50,7 +48,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "3.2.0"
+        version: "4.0.0"
       });
     }
 
@@ -64,17 +62,15 @@ export default {
         if (!update.message) {
           return new Response("OK");
         }
-const message = update.message;
+        const message = update.message;
         const chatId = message.chat.id;
-const from = message.from || {};
-const userId = from.id;
-
-const chatType = message.chat.type;
-const isGroup =
-  chatType === "group" ||
-  chatType === "supergroup";
-
-const admin = isAdmin(userId, env);
+        const from = message.from || {};
+        const userId = from.id;
+        const chatType = message.chat.type;
+        const isGroup =
+          chatType === "group" ||
+          chatType === "supergroup";
+        const admin = isAdmin(userId, env);
         const originalText = String(
           message.text || ""
         ).trim();
@@ -83,28 +79,38 @@ const admin = isAdmin(userId, env);
           return new Response("OK");
         }
 
-        const text =
-  normalizeCommand(originalText);
+        const text = normalizeCommand(originalText);
+        const now = new Date();
 
-if (isGroup) {
-  const groupTitle =
-    message.chat.title || "";
+        if (isGroup) {
+          const groupTitle = message.chat.title || "";
+          const existingGroup = await getLicensedGroup(env.DB, chatId);
+          if (!existingGroup) {
+            await createLicensedGroup(env.DB, chatId, userId, groupTitle);
+          }
+        }
 
-  const existingGroup =
-    await getLicensedGroup(
-      env.DB,
-      chatId
-    );
+        const bypassAccessCheck =
+          text === "/start" ||
+          text === "/help" ||
+          text === "/groupid" ||
+          text === "/users" ||
+          text === "/groups" ||
+          /^\/(?:approve|ban|unban|approvegroup|bangroup|unbangroup)(?:\s|$)/.test(text);
 
-  if (!existingGroup) {
-    await createLicensedGroup(
-      env.DB,
-      chatId,
-      userId,
-      groupTitle
-    );
-  }
-}
+        if (!admin && !bypassAccessCheck) {
+          const licenseRecord = isGroup
+            ? await getLicensedGroup(env.DB, chatId)
+            : await getUser(env.DB, userId);
+          const access = hasAccess(licenseRecord);
+          if (!access.ok) {
+            const messageText = isGroup
+              ? `${access.message}\n\n🆔 Group ID : ${chatId}\nAdmin ကို ဆက်သွယ်၍ Group License ရယူပါ။`
+              : access.message;
+            await sendMessage(env.BOT_TOKEN, chatId, messageText);
+            return new Response("OK");
+          }
+        }
 
         /*
          * =========================================
@@ -176,13 +182,150 @@ if (isGroup) {
 
         /*
          * =========================================
+         * GROUP LICENSE COMMANDS
+         * =========================================
+         */
+        if (text === "/groupid") {
+          await sendMessage(
+            env.BOT_TOKEN,
+            chatId,
+            isGroup
+              ? `🆔 Group ID : ${chatId}\n👥 Group : ${message.chat.title || "မရှိ"}`
+              : "❌ ဒီ Command ကို Group ထဲမှာသာ အသုံးပြုပါ။"
+          );
+          return new Response("OK");
+        }
+
+        if (text === "/groups") {
+          if (!admin) {
+            await sendMessage(env.BOT_TOKEN, chatId, "⛔ ဤ Command ကို Admin သာ အသုံးပြုနိုင်ပါသည်။");
+            return new Response("OK");
+          }
+          const groups = await listGroups(env.DB);
+          if (!groups.length) {
+            await sendMessage(env.BOT_TOKEN, chatId, "👥 Group စာရင်း မရှိသေးပါ။");
+            return new Response("OK");
+          }
+          let report = "👥 LICENSED GROUPS\n\n";
+          for (const group of groups) {
+            report +=
+              `📌 Group : ${group.group_title || "မရှိ"}\n` +
+              `🆔 Group ID : ${group.group_id}\n` +
+              `👤 Owner ID : ${group.owner_id || "မရှိ"}\n` +
+              `📍 Status : ${group.status || "pending"}\n` +
+              `💎 Plan : ${group.plan || "none"}\n` +
+              `📅 Expire : ${group.expires_at ? formatDate(group.expires_at) : "မရှိ"}\n` +
+              `━━━━━━━━━━━━━━━━━━\n`;
+          }
+          await sendLongMessage(env.BOT_TOKEN, chatId, report);
+          return new Response("OK");
+        }
+
+        if (/^\/approvegroup(?:\s|$)/.test(text)) {
+          if (!admin) {
+            await sendMessage(env.BOT_TOKEN, chatId, "⛔ ဤ Command ကို Admin သာ အသုံးပြုနိုင်ပါသည်။");
+            return new Response("OK");
+          }
+          const args = text.split(/\s+/);
+          if (args.length !== 3) {
+            await sendMessage(env.BOT_TOKEN, chatId,
+`အသုံးပြုပုံ
+/approvegroup GROUP_ID DAYS
+
+ဥပမာ
+/approvegroup -100123456789 30
+/approvegroup -100123456789 forever`);
+            return new Response("OK");
+          }
+          const groupId = Number(args[1]);
+          const duration = args[2].toLowerCase();
+          if (!Number.isSafeInteger(groupId) || groupId >= 0) {
+            await sendMessage(env.BOT_TOKEN, chatId, "❌ Group ID မမှန်ပါ။ /groupid ဖြင့် ID ကိုယူပါ။");
+            return new Response("OK");
+          }
+          const group = await getLicensedGroup(env.DB, groupId);
+          if (!group) {
+            await sendMessage(env.BOT_TOKEN, chatId, "❌ Group မတွေ့ပါ။ Bot ကို Group ထဲထည့်ပြီး /groupid သို့ /start အရင်ပို့ပါ။");
+            return new Response("OK");
+          }
+          const license = buildLicense(duration);
+          if (!license.ok) {
+            await sendMessage(env.BOT_TOKEN, chatId, license.message);
+            return new Response("OK");
+          }
+          await approveGroup(env.DB, groupId, license.plan, license.expiresAt);
+          await sendMessage(env.BOT_TOKEN, chatId,
+`✅ Group အသုံးပြုခွင့်ပေးပြီးပါပြီ။
+
+🆔 Group ID : ${groupId}
+👥 Group : ${group.group_title || "မရှိ"}
+💎 Plan : ${license.plan}
+📅 Expire : ${license.expireText}`);
+          try {
+            await sendMessage(env.BOT_TOKEN, groupId,
+`✅ ဒီ Group ကို Bot အသုံးပြုခွင့်ပေးပြီးပါပြီ။
+
+💎 Plan : ${license.plan}
+📅 Expire : ${license.expireText}
+
+ယခု Group အဖွဲ့ဝင်အားလုံး Bot ကို အသုံးပြုနိုင်ပါပြီ။`);
+          } catch (error) {
+            console.error("Group approval notification failed:", error);
+          }
+          return new Response("OK");
+        }
+
+        if (/^\/bangroup(?:\s|$)/.test(text)) {
+          if (!admin) {
+            await sendMessage(env.BOT_TOKEN, chatId, "⛔ ဤ Command ကို Admin သာ အသုံးပြုနိုင်ပါသည်။");
+            return new Response("OK");
+          }
+          const args = text.split(/\s+/);
+          const groupId = Number(args[1]);
+          if (args.length !== 2 || !Number.isSafeInteger(groupId) || groupId >= 0) {
+            await sendMessage(env.BOT_TOKEN, chatId, "အသုံးပြုပုံ\n/bangroup -100123456789");
+            return new Response("OK");
+          }
+          const group = await getLicensedGroup(env.DB, groupId);
+          if (!group) {
+            await sendMessage(env.BOT_TOKEN, chatId, "❌ Group မတွေ့ပါ။");
+            return new Response("OK");
+          }
+          await banGroup(env.DB, groupId);
+          await sendMessage(env.BOT_TOKEN, chatId, `⛔ Group ကို ပိတ်ပြီးပါပြီ။\n\n🆔 Group ID : ${groupId}`);
+          return new Response("OK");
+        }
+
+        if (/^\/unbangroup(?:\s|$)/.test(text)) {
+          if (!admin) {
+            await sendMessage(env.BOT_TOKEN, chatId, "⛔ ဤ Command ကို Admin သာ အသုံးပြုနိုင်ပါသည်။");
+            return new Response("OK");
+          }
+          const args = text.split(/\s+/);
+          const groupId = Number(args[1]);
+          if (args.length !== 2 || !Number.isSafeInteger(groupId) || groupId >= 0) {
+            await sendMessage(env.BOT_TOKEN, chatId, "အသုံးပြုပုံ\n/unbangroup -100123456789");
+            return new Response("OK");
+          }
+          const group = await getLicensedGroup(env.DB, groupId);
+          if (!group) {
+            await sendMessage(env.BOT_TOKEN, chatId, "❌ Group မတွေ့ပါ။");
+            return new Response("OK");
+          }
+          await unbanGroup(env.DB, groupId);
+          await sendMessage(env.BOT_TOKEN, chatId, `✅ Group ကို ပြန်ဖွင့်ပြီးပါပြီ။\n\n🆔 Group ID : ${groupId}`);
+          return new Response("OK");
+        }
+
+        /*
+         * =========================================
          * LEDGER COMMANDS
          * =========================================
          */
 
         if (text === "/ledger") {
           const rows =
-            await getNumberTotals(env.DB);
+            await getNumberTotals(env.DB, chatId);
 
           const activeRows = rows.filter(
             (row) =>
@@ -211,7 +354,7 @@ if (isGroup) {
 
         if (text === "/untouched") {
           const rows =
-            await getUntouchedNumbers(env.DB);
+            await getUntouchedNumbers(env.DB, chatId);
 
           const msg = rows.length
             ? "⭕ မထိုးရသေးသောဂဏန်းများ\n\n" +
@@ -253,6 +396,7 @@ if (isGroup) {
           const rows =
             await getTopNumbers(
               env.DB,
+              chatId,
               limit
             );
 
@@ -296,6 +440,7 @@ if (isGroup) {
           const row =
             await getNumberTotal(
               env.DB,
+              chatId,
               args[1]
             );
 
@@ -333,6 +478,7 @@ if (isGroup) {
           const rows =
             await getNumbersBelowAmount(
               env.DB,
+              chatId,
               amount
             );
 
@@ -380,6 +526,7 @@ if (isGroup) {
           const rows =
             await getNumbersAboveAmount(
               env.DB,
+              chatId,
               amount
             );
 
@@ -415,7 +562,10 @@ if (isGroup) {
           }
 
           const total =
-            await getTotalSales(env.DB);
+            await getTotalSales(
+              env.DB,
+              isGroup ? chatId : null
+            );
 
           await sendMessage(
             env.BOT_TOKEN,
@@ -458,8 +608,9 @@ if (isGroup) {
             return new Response("OK");
           }
 
-          await resetNumberTotals(env.DB);
-await resetTransactions(env.DB);
+          const resetScope = isGroup ? chatId : null;
+          await resetNumberTotals(env.DB, resetScope);
+          await resetTransactions(env.DB, resetScope);
 
 await sendMessage(
   env.BOT_TOKEN,
@@ -475,7 +626,7 @@ await sendMessage(
          * ADMIN COMMAND — /approve
          * =========================================
          */
-        if (text.startsWith("/approve")) {
+        if (/^\/approve(?:\s|$)/.test(text)) {
           if (!admin) {
             await sendMessage(
               env.BOT_TOKEN,
@@ -632,7 +783,7 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
          * ADMIN COMMAND — /ban
          * =========================================
          */
-        if (text.startsWith("/ban")) {
+        if (/^\/ban(?:\s|$)/.test(text)) {
           if (!admin) {
             await sendMessage(
               env.BOT_TOKEN,
@@ -728,7 +879,7 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
          * ADMIN COMMAND — /unban
          * =========================================
          */
-        if (text.startsWith("/unban")) {
+        if (/^\/unban(?:\s|$)/.test(text)) {
           if (!admin) {
             await sendMessage(
               env.BOT_TOKEN,
@@ -827,25 +978,6 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
          * =========================================
          */
         if (text === "/start") {
-          let user = await getUser(
-  env.DB,
-  userId
-);
-
-if (!user) {
-  await createUser(
-    env.DB,
-    userId,
-    from.username || "",
-    from.first_name || ""
-  );
-
-  user = await getUser(
-    env.DB,
-    userId
-  );
-}
-
           if (admin) {
             await sendMessage(
               env.BOT_TOKEN,
@@ -853,22 +985,23 @@ if (!user) {
 `👑 မင်္ဂလာပါ Admin
 
 ━━━━━━━━━━━━━━
-✅ New Zealand 2D Ledger Bot
-
+✅ New Zealand 2D Ledger Bot v4.0
 ━━━━━━━━━━━━━━
 
-🛠 Admin Control Panel
+🛠 User Commands
+👥 /users
+✅ /approve USER_ID DAYS
+🚫 /ban USER_ID
+🔓 /unban USER_ID
 
-👥 /users - User စာရင်း
-✅ /approve CHAT_ID DAYS
-♾ /approve CHAT_ID forever
-🚫 /ban CHAT_ID
-🔓 /unban CHAT_ID
-
-━━━━━━━━━━━━━━
+🛠 Group Commands
+🆔 /groupid
+👥 /groups
+✅ /approvegroup GROUP_ID DAYS
+🚫 /bangroup GROUP_ID
+🔓 /unbangroup GROUP_ID
 
 📊 Ledger Commands
-
 📒 /ledger
 🎯 /untouched
 🏆 /top
@@ -878,13 +1011,45 @@ if (!user) {
 📈 /sales
 🗑 /resetledger`
             );
-
             return new Response("OK");
           }
 
-          const access =
-            hasAccess(user);
+          if (isGroup) {
+            const group = await getLicensedGroup(env.DB, chatId);
+            const access = hasAccess(group);
+            if (!access.ok) {
+              await sendMessage(
+                env.BOT_TOKEN,
+                chatId,
+`🔒 ဒီ Group ကို မှတ်ပုံတင်ပြီးပါပြီ။
 
+${access.message}
+
+🆔 Group ID : ${chatId}
+👥 Group : ${message.chat.title || "မရှိ"}
+
+Admin ထံ Group အသုံးပြုခွင့်တောင်းပါ။`
+              );
+              return new Response("OK");
+            }
+
+            await sendMessage(env.BOT_TOKEN, chatId, buildWelcomeMessage());
+            return new Response("OK");
+          }
+
+          let user = await getUser(env.DB, userId);
+          const isNewUser = !user;
+          if (!user) {
+            await createUser(
+              env.DB,
+              userId,
+              from.username || "",
+              from.first_name || ""
+            );
+            user = await getUser(env.DB, userId);
+          }
+
+          const access = hasAccess(user);
           if (!access.ok) {
             await sendMessage(
               env.BOT_TOKEN,
@@ -893,7 +1058,7 @@ if (!user) {
 
 ${access.message}
 
-🆔 သင့် Chat ID : ${chatId}
+🆔 သင့် User ID : ${userId}
 
 Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
             );
@@ -905,127 +1070,22 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
                   getAdminId(env),
 `🔔 အသုံးပြုခွင့်တောင်းဆိုမှု
 
-👤 အမည် : ${
-                    from.first_name ||
-                    "မရှိ"
-                  }
-📛 Username : ${
-                    from.username
-                      ? `@${from.username}`
-                      : "မရှိ"
-                  }
-🆔 Chat ID : ${chatId}
+👤 အမည် : ${from.first_name || "မရှိ"}
+📛 Username : ${from.username ? `@${from.username}` : "မရှိ"}
+🆔 User ID : ${userId}
 
 ခွင့်ပြုရန်
-/approve ${chatId} 30`
+/approve ${userId} 30`
                 );
               } catch (error) {
-                console.error(
-                  "Admin notification failed:",
-                  error
-                );
+                console.error("Admin notification failed:", error);
               }
             }
-
             return new Response("OK");
           }
 
-          await sendMessage(
-    env.BOT_TOKEN,
-    chatId,
-    `
-🇳🇿 New Zealand 2D Ledger Bot
-
-🎉 2D Ledger Bot မှ ကြိုဆိုပါတယ်။
-
-ဒီ Bot သည် 2D App စာရင်းများကို
-လွယ်ကူ၊ မြန်ဆန်၊ တိကျစွာ တွက်ချက်ပေးနိုင်သော
-Smart Ledger Bot ဖြစ်ပါသည်။
-
-━━━━━━━━━━━━━━
-
-✨ Bot ၏ အားသာချက်များ
-
-① 2D စာရင်းကို အလိုအလျောက်တွက်ချက်ပေးခြင်း
-
-② Reverse သင်္ကေတများကို ထောက်ပံ့ပေးခြင်း
-   ဥပမာ - R / r / ® / Ⓡ
-
-③ Rule Alias (English) များကို ထောက်ပံ့ပေးခြင်း
-   ဥပမာ -
-   အပူး = apu
-   အခွေ = khwe
-   အခွေပူး = khwepu
-   ပါဝါ = p
-   နက္ခတ် = n
-   ညီကို = t
-   ဘရိတ် = b / br
-
-④ Rule များကို ထောက်ပံ့ပေးခြင်း
-   အခွေ၊ အခွေပူး၊ အပူး၊ ပါဝါ၊ နက္ခတ်၊
-   ညီကို၊ စုံစုံ၊ မမ၊ စုံမ၊ မစုံ၊
-   ဘရိတ်၊ ပါတ်၊ ထိပ်၊ ပိတ်
-
-⑤ ကပ်ဂဏန်း (Gap) ပုံစံများကို ထောက်ပံ့ပေးခြင်း
-   ဥပမာ -
-   67/12345
-   67/12345R
-   67/12345®
-
-⑥ Space ပါ/မပါ နှစ်မျိုးလုံး လက်ခံပေးခြင်း
-   ဥပမာ -
-   67R100 = 67R 100
-   5br300 = 5 br 300
-
-⑦ ကွက်အရေအတွက်နှင့် ငွေပမာဏကို
-   အလိုအလျောက်တွက်ချက်ပေးခြင်း
-
-⑧ စာရင်းမှားယွင်းပါက
-   တိကျသော Error Message ပြသပေးခြင်း
-
-⑨ သပ်ရပ်လှပသော Report ဖြင့်
-   အလိုအလျောက်ထုတ်ပေးခြင်း
-
-⑩ မြန်မာစာဖြင့် အလွယ်တကူ အသုံးပြုနိုင်ခြင်း
-
-⑪ Telegram ပေါ်တွင်
-   ချက်ချင်းအသုံးပြုနိုင်ခြင်း
-
-━━━━━━━━━━━━━━
-
-💎 VIP အသင်းဝင်ကြေး
-
-📅 1 လ — 30,000 ကျပ်
-📅 2 လ — 50,000 ကျပ်
-📅 5 လ — 140,000 ကျပ်
-📅 1 နှစ် — 300,000 ကျပ်
-
-━━━━━━━━━━━━━━
-
-🎁 5 လနှင့်အထက် ဝယ်ယူပါက
-🎉 2 လ FREE လက်ဆောင် ရရှိမည်။
-
-━━━━━━━━━━━━━━
-
-📩 VIP ဝင်လိုပါက Admin ကို ဆက်သွယ်ပါ။
-
-📱 Telegram : @NewZealand2D2026
-
-💳 KBZPay
-👤 Ye Htet Aung
-📞 09 892276551
-
-💳 WavePay
-👤 Khing Tha Zin
-📞 09 788534785
-
-━━━━━━━━━━━━━━
-
-🙏 New Zealand 2D Ledger Bot ကို
-အသုံးပြုပေးသည့်အတွက် ကျေးဇူးတင်ရှိပါသည်။
-`
-);
-return new Response("OK");
+          await sendMessage(env.BOT_TOKEN, chatId, buildWelcomeMessage());
+          return new Response("OK");
         }
 
         /*
@@ -1035,17 +1095,25 @@ return new Response("OK");
          */
         if (text === "/help") {
           if (!admin) {
-            const user =
-              await getUser(
-                env.DB,
-                userId
-              );
-
-            const access =
-              hasAccess(user);
-
+            const licenseRecord = isGroup
+              ? await getLicensedGroup(env.DB, chatId)
+              : await getUser(env.DB, userId);
+            const access = hasAccess(licenseRecord);
             if (!access.ok) {
-              await sendLongMessage(
+              await sendMessage(
+                env.BOT_TOKEN,
+                chatId,
+                isGroup
+                  ? `${access.message}
+
+🆔 Group ID : ${chatId}`
+                  : access.message
+              );
+              return new Response("OK");
+            }
+          }
+
+          await sendLongMessage(
             env.BOT_TOKEN,
             chatId,
 `📖 အသုံးပြုပုံ
@@ -1054,9 +1122,7 @@ return new Response("OK");
 67 500
 67R500
 67R 500
-67R 78R 90R 500
 67-78-90 R200
-14.58.18.56R100
 
 🔹 Carry Amount
 16.27.38.49.50
@@ -1065,36 +1131,32 @@ return new Response("OK");
 
 🔹 အခွေ / အခွေပူး
 1369ခွေ300
-1369 အခွေ 300
 1369ခွေပူး100
-1369အခွေပူး 100
 185376ခပ200
 
 🔹 ကပ်ဂဏန်း
 1369.04578ကပ်R250
-1369/04578 R250
-67/12345890 R 500
+67/12345890 R500
 
-🔹 Special Rules — မြန်မာ / English
-နက္ခတ်500  |  n500
-ပါဝါ500    |  p500
-ဆယ်ပြည့်500 |  s500
-ညီကို500   |  t500
-အပူး200    |  apu200
-စုံပူး200   |  sp200
-မပူး200     |  mp200
-မမ200       |  mm200
-စုံစုံ200    |  ss200
+🔹 Special Rules
+နက္ခတ်500 | n500
+ပါဝါ500 | p500
+ဆယ်ပြည့်500 | s500
+ညီကို500 | t500
+အပူး200 | apu200
+စုံပူး200 | sp200
+မပူး200 | mp200
+မမ200 | mm200
+စုံစုံ200 | ss200
 
-🔹 ဘရိတ် / Break
+🔹 ဘရိတ်
 0ဘရိတ်200
-1 ဘရိတ် 500
 5br500
 7 break 500
 
 🔹 ပါတ် / ထိပ် / ပိတ်
 8/9ပါတ်500
-1/7 ထိပ် 500
+1/7ထိပ်500
 3/5ပိတ်500
 
 📊 Ledger Commands
@@ -1107,110 +1169,7 @@ return new Response("OK");
 /above 10000
 /mysales`
           );
-
-              return new Response("OK");
-            }
-          }
-
-          await sendMessage(
-            env.BOT_TOKEN,
-            chatId,
-`📖 အသုံးပြုပုံ
-
-Direct / Reverse
-67 500
-67R 500
-67R 78R 90R 500
-67-78-90 R 500
-
-အခွေ
-60147 အခွေ 500
-60147 အခွေပူး 500
-
-Fixed Rules
-အပူး 500
-ပါဝါ 500
-နက္ခတ် 500
-ညီကို 500
-စုံစုံ 500
-မမ 500
-စုံမ 500
-မစုံ 500
-
-ပါတ် / ထိပ် / ပိတ်
-8/9 ပါတ် 500
-1/7 ထိပ် 500
-3/5 ပိတ် 500
-
-ကပ်ဂဏန်း
-67/12345890 500
-67/12345890 R 500
-
-Ledger Commands
-/ledger
-/untouched
-/top
-/top 20
-/number 67
-/below 5000
-/above 10000
-/mysales`
-          );
-
           return new Response("OK");
-        }
-
-        /*
-         * =========================================
-         * USER LICENSE CHECK
-         * =========================================
-         */
-        if (!admin) {
-
-  if (isGroup) {
-
-    const group =
-      await getLicensedGroup(
-        env.DB,
-        chatId
-      );
-
-    const access =
-      hasAccess(group);
-
-    if (!access.ok) {
-      await sendMessage(
-        env.BOT_TOKEN,
-        chatId,
-        "🔒 ဒီ Group ကို အသုံးပြုခွင့် မပေးရသေးပါ။\n\nAdmin ကို ဆက်သွယ်ပြီး Group License ရယူပါ။"
-      );
-
-      return new Response("OK");
-    }
-
-  } else {
-
-    const user =
-      await getUser(
-        env.DB,
-        userId
-      );
-
-    const access =
-      hasAccess(user);
-
-    if (!access.ok) {
-      await sendMessage(
-        env.BOT_TOKEN,
-        chatId,
-        access.message
-      );
-
-      return new Response("OK");
-    }
-
-  }
-
         }
 
         /*
@@ -1277,6 +1236,7 @@ ${reportLines}
           try {
             await addBetItemsToNumberTotals(
               env.DB,
+              chatId,
               bet.items
             );
           } catch (ledgerError) {
@@ -1287,23 +1247,14 @@ ${reportLines}
           }
 
           try {
-            await env.DB.prepare(`
-              INSERT INTO transactions
-              (
-                chat_id,
-                bet_text,
-                total_amount,
-                created_at
-              )
-              VALUES (?, ?, ?, ?)
-            `)
-              .bind(
-                chatId,
-                originalText,
-                grandTotal,
-                now.toISOString()
-              )
-              .run();
+            await saveTransaction(
+              env.DB,
+              chatId,
+              userId,
+              originalText,
+              grandTotal,
+              now.toISOString()
+            );
           } catch (databaseError) {
             console.error(
               "Transaction save failed:",
@@ -1425,6 +1376,81 @@ ${originalText}
     );
   }
 };
+
+function buildLicense(duration) {
+  if (duration === "forever" || duration === "lifetime") {
+    return {
+      ok: true,
+      plan: "Lifetime",
+      expiresAt: null,
+      expireText: "အမြဲတမ်း"
+    };
+  }
+
+  const days = Number(duration);
+  if (!Number.isInteger(days) || days <= 0) {
+    return {
+      ok: false,
+      message: "❌ သက်တမ်းမမှန်ပါ။\n\nဥပမာ — 30, 90, 365 သို့ forever"
+    };
+  }
+
+  const expireDate = new Date();
+  expireDate.setUTCDate(expireDate.getUTCDate() + days);
+  return {
+    ok: true,
+    plan: getPlanName(days),
+    expiresAt: expireDate.toISOString(),
+    expireText: formatDate(expireDate)
+  };
+}
+
+function buildWelcomeMessage() {
+  return `🇳🇿 New Zealand 2D Ledger Bot
+
+🎉 2D Ledger Bot မှ ကြိုဆိုပါတယ်။
+
+ဒီ Bot သည် 2D App စာရင်းများကို
+လွယ်ကူ၊ မြန်ဆန်၊ တိကျစွာ တွက်ချက်ပေးနိုင်သော
+Smart Ledger Bot ဖြစ်ပါသည်။
+
+━━━━━━━━━━━━━━
+
+✨ Bot ၏ အားသာချက်များ
+
+① 2D စာရင်းကို အလိုအလျောက်တွက်ချက်ပေးခြင်း
+② Reverse — R / r / ® / Ⓡ
+③ Rule Alias — apu / p / n / t / b / br
+④ အခွေ၊ အခွေပူး၊ အပူး၊ ပါဝါ၊ နက္ခတ်၊ ညီကို၊ ဘရိတ် စသည့် Rule များ
+⑤ ကပ်ဂဏန်းနှင့် Space ပါ/မပါ ပုံစံများ
+⑥ ကွက်နှင့် ငွေပမာဏ အလိုအလျောက်တွက်ချက်ခြင်း
+⑦ သပ်ရပ်သော Report ထုတ်ပေးခြင်း
+⑧ Group တစ်ခုချင်း Ledger သီးသန့်ထားခြင်း
+
+━━━━━━━━━━━━━━
+
+💎 VIP အသင်းဝင်ကြေး
+📅 1 လ — 30,000 ကျပ်
+📅 2 လ — 50,000 ကျပ်
+📅 5 လ — 140,000 ကျပ်
+📅 1 နှစ် — 300,000 ကျပ်
+
+🎁 5 လနှင့်အထက် ဝယ်ယူပါက 2 လ FREE
+
+━━━━━━━━━━━━━━
+
+📱 Telegram : @NewZealand2D2026
+
+💳 KBZPay — Ye Htet Aung
+📞 09 892276551
+
+💳 WavePay — Khing Tha Zin
+📞 09 788534785
+
+━━━━━━━━━━━━━━
+
+🙏 အသုံးပြုပေးသည့်အတွက် ကျေးဇူးတင်ရှိပါသည်။`;
+}
 
 function getAdminId(env) {
   const configuredId =

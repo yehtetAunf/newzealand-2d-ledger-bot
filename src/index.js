@@ -55,7 +55,7 @@ export default {
         if (!update.message) {
           return new Response("OK");
         }
-
+const message = update.message;
         const chatId = message.chat.id;
 const from = message.from || {};
 const userId = from.id;

@@ -1061,22 +1061,32 @@ Ledger Commands
             bet.totalAmount ??
             0;
 
-          const report =
-`📝 2D REPORT
-🆔 ID : ${reportId}
-📅 ရက်စွဲ : ${dateText}
-⏰ အချိန် : ${timeText}
+          const report = `╔══════════════════════╗
+        📝 2D စာရင်း
+╚══════════════════════╝
 
-👤 ထိုးသူ : ${displayName}
-━━━━━━━━━━━━━━━━━━━━━━
-${reportLines}
-━━━━━━━━━━━━━━━━━━━━━━
-💵 စုစုပေါင်း : ${formatMoney(
-            grandTotal
-          )} ကျပ်
+🆔 စာရင်းအမှတ် : ${reportId}
+👤 ထိုးသူ        : ${displayName}
+📅 ရက်စွဲ        : ${dateText}
+🕒 အချိန်        : ${timeText}
 
-🏛 🍀 ဂဏန်းများ ပြန်စစ်ပါ 🍀`;
+══════════════════════
 
+${bet.items.map(item => `🔹 ${item.label}
+   ➜ ${item.count} ကွက် × ${formatMoney(item.amountPerNumber)} = ${formatMoney(item.totalAmount)} ကျပ်`).join("\n\n")}
+
+══════════════════════
+
+💰 စုစုပေါင်း : ${formatMoney(grandTotal)} ကျပ်
+
+══════════════════════
+
+✅ စာရင်းလက်ခံပြီးပါပြီ
+
+⚠️ ဂဏန်း၊ ကွက်အရေအတွက်နှင့်
+ငွေပမာဏကို ပြန်လည်စစ်ဆေးပေးပါ။
+
+🙏 ကျေးဇူးတင်ပါတယ်။`;
           await sendLongMessage(
             env.BOT_TOKEN,
             chatId,

@@ -1087,76 +1087,44 @@ Ledger Commands
             from.username ||
             "New Zealand 2D";
 
-          const reportId =
-            await getNextReportId(
-              env.DB
-            );
-
-          const now = new Date();
-
-          const dateText =
-            formatYangonDate(now);
-
-          const timeText =
-            formatYangonTime(now);
 
           const reportLines =
-            bet.items
-              .map((item, index) => {
-                const number =
-                  "①②③④⑤⑥⑦⑧⑨⑩"[index] ||
-                  `${index + 1}.`;
+  bet.items
+    .map((item, index) => {
+      const number =
+        "①②③④⑤⑥⑦⑧⑨⑩"[index] ||
+        `${index + 1}.`;
 
-                const amountPerNumber =
-                  item.amountPerNumber ??
-                  (
-                    Number(item.count) > 0
-                      ? Number(item.totalAmount) /
-                        Number(item.count)
-                      : 0
-                  );
-
-                return (
-                  `${number} ${item.label}\n` +
-                  `   ➜ ${item.count} ကွက် × ` +
-                  `${formatMoney(amountPerNumber)} ကျပ်\n` +
-                  `   💵 = ${formatMoney(item.totalAmount)} ကျပ်`
-                );
-              })
-              .join("\n\n");
+      return (
+        `${number} ${item.label} ` +
+        `(${item.count} ကွက်) → ` +
+        `${formatMoney(item.totalAmount)} ကျပ်`
+      );
+    })
+    .join("\n");
 
           const grandTotal =
             bet.grandTotal ??
             bet.totalAmount ??
             0;
 
-          const report =
-`╔══════════════════════╗
-        📝 2D စာရင်း
-╚══════════════════════╝
+          const report = `📝 2D စာရင်း
+👤 ထိုးသူ : ${displayName}
 
-🆔 စာရင်းအမှတ် : ${reportId}
-👤 ထိုးသူ        : ${displayName}
-📅 ရက်စွဲ        : ${dateText}
-🕒 အချိန်        : ${timeText}
-
-══════════════════════
+━━━━━━━━━━━━━━━━━━━━
 
 ${reportLines}
 
-══════════════════════
+━━━━━━━━━━━━━━━━━━━━
 
-📊 စုစုပေါင်းကွက် : ${bet.totalCount}
-💰 စုစုပေါင်းငွေ : ${formatMoney(grandTotal)} ကျပ်
+💰 စုစုပေါင်း : ${formatMoney(grandTotal)} ကျပ်
 
-══════════════════════
-
-✅ စာရင်းလက်ခံပြီးပါပြီ
+━━━━━━━━━━━━━━━━━━━━
 
 ⚠️ ဂဏန်း၊ ကွက်အရေအတွက်နှင့်
 ငွေပမာဏကို ပြန်လည်စစ်ဆေးပေးပါ။
 
-🙏 ကျေးဇူးတင်ပါတယ်။`;
+✅ စာရင်းလက်ခံပြီးပါပြီ`;
 
           await sendLongMessage(
             env.BOT_TOKEN,

@@ -48,7 +48,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "4.2.1"
+        version: "5.0.0"
       });
     }
 
@@ -85,6 +85,15 @@ export default {
         }
 
         let text = normalizeCommand(originalText);
+        const replyPrompt = String(message.reply_to_message?.text || "");
+
+        if (replyPrompt.includes("စစ်လိုသော ၂ လုံးဂဏန်းကို ပို့ပါ")) {
+          const numberText = originalText.replace(/\s+/g, "");
+          if (/^\d{1,2}$/.test(numberText)) {
+            text = `/number ${numberText}`;
+          }
+        }
+
         const now = new Date();
 
         // Admin မြန်မာ Reply Keyboard ကို Private Chat မှာသာ ပြမယ်။
@@ -100,6 +109,24 @@ export default {
           }
 
           text = mapAdminButtonToCommand(text);
+        }
+
+        if (!admin || isGroup) {
+          const userMenuHandled = await handleUserKeyboard(
+            env,
+            chatId,
+            text
+          );
+
+          if (userMenuHandled) {
+            return new Response("OK");
+          }
+
+          const userCommands = {
+            "📊 စာရင်းကြည့်ရန်": "/ledger",
+            "📖 အသုံးပြုနည်း": "/help"
+          };
+          text = userCommands[text] || text;
         }
 
         if (isGroup) {
@@ -353,7 +380,7 @@ export default {
           );
 
           const msg = activeRows.length
-            ? "📊 NUMBER LEDGER\n\n" +
+            ? "📊 ဂဏန်းစာရင်း\n\n" +
               activeRows
                 .map(
                   (row) =>
@@ -373,6 +400,14 @@ export default {
         }
 
         if (text === "/untouched") {
+          if (!admin) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              "⛔ ဒီအချက်အလက်ကို စီမံသူတစ်ယောက်တည်းသာ ကြည့်နိုင်ပါသည်။"
+            );
+            return new Response("OK");
+          }
           const rows =
             await getUntouchedNumbers(env.DB, chatId);
 
@@ -393,6 +428,14 @@ export default {
         }
 
         if (text.startsWith("/top")) {
+          if (!admin) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              "⛔ ဒီအချက်အလက်ကို စီမံသူတစ်ယောက်တည်းသာ ကြည့်နိုင်ပါသည်။"
+            );
+            return new Response("OK");
+          }
           const args = text.split(/\s+/);
           const limit =
             args[1] === undefined
@@ -475,6 +518,14 @@ export default {
         }
 
         if (text.startsWith("/below")) {
+          if (!admin) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              "⛔ ဒီအချက်အလက်ကို စီမံသူတစ်ယောက်တည်းသာ ကြည့်နိုင်ပါသည်။"
+            );
+            return new Response("OK");
+          }
           const args = text.split(/\s+/);
           const amount = Number(
             String(args[1] || "")
@@ -523,6 +574,14 @@ export default {
         }
 
         if (text.startsWith("/above")) {
+          if (!admin) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              "⛔ ဒီအချက်အလက်ကို စီမံသူတစ်ယောက်တည်းသာ ကြည့်နိုင်ပါသည်။"
+            );
+            return new Response("OK");
+          }
           const args = text.split(/\s+/);
           const amount = Number(
             String(args[1] || "")
@@ -590,7 +649,7 @@ export default {
           await sendMessage(
             env.BOT_TOKEN,
             chatId,
-            "💰 TOTAL SALES\n\n" +
+            "💰 စုစုပေါင်းအရောင်း\n\n" +
             `${formatMoney(total)} ကျပ်`
           );
 
@@ -635,7 +694,7 @@ export default {
 await sendMessage(
   env.BOT_TOKEN,
   chatId,
-  "✅ Number Ledger ကို Reset လုပ်ပြီးပါပြီ"
+  "✅ ဒီအုပ်စု၏ စာရင်းကို ရှင်းပြီးပါပြီ။"
 );
 
           return new Response("OK");
@@ -998,18 +1057,18 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
          * =========================================
          */
         if (text === "/start") {
-          if (admin) {
+          if (admin && !isGroup) {
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
-`👑 မင်္ဂလာပါ Admin
+`👑 မင်္ဂလာပါ စီမံသူ
 
 ━━━━━━━━━━━━━━
-✅ New Zealand 2D Ledger Bot v4.2
+✅ New Zealand 2D Ledger Bot v5.0
 ━━━━━━━━━━━━━━
 
 အောက်က မြန်မာခလုတ်တွေကို နှိပ်ပြီး စီမံနိုင်ပါပြီ။
-Command တွေလည်း ဆက်လက်အသုံးပြုနိုင်ပါတယ်။`,
+အောက်က မြန်မာခလုတ်တွေကို နှိပ်ပြီး အသုံးပြုနိုင်ပါတယ်။`,
               adminMainKeyboard()
             );
             return new Response("OK");
@@ -1034,7 +1093,7 @@ Admin ထံ Group အသုံးပြုခွင့်တောင်းပ�
               return new Response("OK");
             }
 
-            await sendMessage(env.BOT_TOKEN, chatId, buildWelcomeMessage());
+            await sendMessage(env.BOT_TOKEN, chatId, buildWelcomeMessage(), userMainKeyboard());
             return new Response("OK");
           }
 
@@ -1051,7 +1110,7 @@ Admin ထံ Group အသုံးပြုခွင့်တောင်းပ�
           }
 
           const access = hasAccess(user);
-          await sendMessage(env.BOT_TOKEN, chatId, buildWelcomeMessage());
+          await sendMessage(env.BOT_TOKEN, chatId, buildWelcomeMessage(), userMainKeyboard());
           if (!access.ok) {
             await sendMessage(
               env.BOT_TOKEN,
@@ -1617,25 +1676,79 @@ function jsonResponse(
   );
 }
 
+function userMainKeyboard() {
+  return {
+    keyboard: [
+      ["🎲 ၂ဒီထိုးရန်", "📊 စာရင်းကြည့်ရန်"],
+      ["🔍 ဂဏန်းရှာရန်", "📖 အသုံးပြုနည်း"],
+      ["💎 အသင်းဝင်ရန်", "📞 စီမံသူဆက်သွယ်ရန်"]
+    ],
+    resize_keyboard: true,
+    is_persistent: true,
+    input_field_placeholder: "လိုချင်သောလုပ်ဆောင်ချက်ကို ရွေးပါ"
+  };
+}
+
+async function handleUserKeyboard(env, chatId, text) {
+  if (text === "🎲 ၂ဒီထိုးရန်") {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "🎲 ထိုးလိုသော ၂ဒီစာရင်းကို တိုက်ရိုက်ရိုက်ပို့ပါ။\n\nဥပမာ\n67 500\n67R500\n5br300"
+    );
+    return true;
+  }
+
+  if (text === "🔍 ဂဏန်းရှာရန်") {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "🔍 စစ်လိုသော ၂ လုံးဂဏန်းကို ပို့ပါ။\n\nဥပမာ — 67",
+      { force_reply: true, input_field_placeholder: "ဥပမာ 67" }
+    );
+    return true;
+  }
+
+  if (text === "💎 အသင်းဝင်ရန်") {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      `💎 အသင်းဝင်ကြေး\n\n📅 ၁ လ — 30,000 ကျပ်\n📅 ၂ လ — 50,000 ကျပ်\n📅 ၅ လ — 140,000 ကျပ်\n📅 ၁ နှစ် — 300,000 ကျပ်\n\n📩 ဝယ်ယူလိုပါက @NewZealand2D2026 ကို ဆက်သွယ်ပါ။`
+    );
+    return true;
+  }
+
+  if (text === "📞 စီမံသူဆက်သွယ်ရန်") {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      `📞 စီမံသူဆက်သွယ်ရန်\n\nTelegram : @NewZealand2D2026\n\nKBZPay\nYe Htet Aung\n09 892276551\n\nWavePay\nKhing Tha Zin\n09 788534785`
+    );
+    return true;
+  }
+
+  return false;
+}
+
 function adminMainKeyboard() {
   return {
     keyboard: [
-      ["👤 အသုံးပြုသူများ", "👥 Group များ"],
-      ["📊 Ledger စီမံရန်", "💰 အရောင်းကြည့်ရန်"],
+      ["👤 အသုံးပြုသူများ", "👥 အုပ်စုများ"],
+      ["📊 စာရင်းစီမံရန်", "💰 အရောင်းကြည့်ရန်"],
       ["⌨️ ခလုတ်ဖျောက်ရန်"]
     ],
     resize_keyboard: true,
     is_persistent: true,
-    input_field_placeholder: "Admin လုပ်ဆောင်ချက်ရွေးပါ"
+    input_field_placeholder: "စီမံသူလုပ်ဆောင်ချက်ရွေးပါ"
   };
 }
 
 function adminUserKeyboard() {
   return {
     keyboard: [
-      ["👥 လူစာရင်းကြည့်ရန်"],
-      ["✅ User ခွင့်ပြုရန်", "🚫 User ပိတ်ရန်"],
-      ["🔓 User ပြန်ဖွင့်ရန်"],
+      ["👥 အသုံးပြုသူစာရင်း"],
+      ["✅ အသုံးပြုခွင့်ပေးရန်", "🚫 အသုံးပြုခွင့်ပိတ်ရန်"],
+      ["🔓 အသုံးပြုခွင့်ပြန်ဖွင့်ရန်"],
       ["🔙 ပင်မစာမျက်နှာ"]
     ],
     resize_keyboard: true,
@@ -1646,9 +1759,9 @@ function adminUserKeyboard() {
 function adminGroupKeyboard() {
   return {
     keyboard: [
-      ["📋 Group စာရင်းကြည့်ရန်"],
-      ["✅ Group ခွင့်ပြုရန်", "🚫 Group ပိတ်ရန်"],
-      ["🔓 Group ပြန်ဖွင့်ရန်"],
+      ["📋 အုပ်စုစာရင်း"],
+      ["✅ အုပ်စုခွင့်ပြုရန်", "🚫 အုပ်စုပိတ်ရန်"],
+      ["🔓 အုပ်စုပြန်ဖွင့်ရန်"],
       ["🔙 ပင်မစာမျက်နှာ"]
     ],
     resize_keyboard: true,
@@ -1659,10 +1772,10 @@ function adminGroupKeyboard() {
 function adminLedgerKeyboard() {
   return {
     keyboard: [
-      ["📒 Ledger ကြည့်ရန်", "🎯 မထိုးရသေးသောဂဏန်း"],
+      ["📒 စာရင်းကြည့်ရန်", "🎯 မထိုးရသေးသောဂဏန်း"],
       ["🏆 အများဆုံးဂဏန်း", "🔢 ဂဏန်းရှာရန်"],
       ["📉 သတ်မှတ်ငွေအောက်", "📈 သတ်မှတ်ငွေအထက်"],
-      ["♻️ Ledger ရှင်းရန်"],
+      ["♻️ စာရင်းရှင်းရန်"],
       ["🔙 ပင်မစာမျက်နှာ"]
     ],
     resize_keyboard: true,
@@ -1676,13 +1789,13 @@ async function handleAdminKeyboard(env, chatId, text) {
     return true;
   }
 
-  if (text === "👥 Group များ") {
-    await sendMessage(env.BOT_TOKEN, chatId, "👥 Group စီမံခန့်ခွဲမှု", adminGroupKeyboard());
+  if (text === "👥 အုပ်စုများ") {
+    await sendMessage(env.BOT_TOKEN, chatId, "👥 အုပ်စုစီမံခန့်ခွဲမှု", adminGroupKeyboard());
     return true;
   }
 
-  if (text === "📊 Ledger စီမံရန်") {
-    await sendMessage(env.BOT_TOKEN, chatId, "📊 Ledger လုပ်ဆောင်ချက်ရွေးပါ", adminLedgerKeyboard());
+  if (text === "📊 စာရင်းစီမံရန်") {
+    await sendMessage(env.BOT_TOKEN, chatId, "📊 စာရင်းလုပ်ဆောင်ချက်ရွေးပါ", adminLedgerKeyboard());
     return true;
   }
 
@@ -1691,7 +1804,7 @@ async function handleAdminKeyboard(env, chatId, text) {
   }
 
   if (text === "🔙 ပင်မစာမျက်နှာ") {
-    await sendMessage(env.BOT_TOKEN, chatId, "👑 Admin ပင်မစာမျက်နှာ", adminMainKeyboard());
+    await sendMessage(env.BOT_TOKEN, chatId, "👑 စီမံသူပင်မစာမျက်နှာ", adminMainKeyboard());
     return true;
   }
 
@@ -1702,25 +1815,25 @@ async function handleAdminKeyboard(env, chatId, text) {
     return true;
   }
 
-  if (text === "✅ Group ခွင့်ပြုရန်") {
+  if (text === "✅ အုပ်စုခွင့်ပြုရန်") {
     await sendGroupPicker(env, chatId, "approve");
     return true;
   }
 
-  if (text === "🚫 Group ပိတ်ရန်") {
+  if (text === "🚫 အုပ်စုပိတ်ရန်") {
     await sendGroupPicker(env, chatId, "ban");
     return true;
   }
 
-  if (text === "🔓 Group ပြန်ဖွင့်ရန်") {
+  if (text === "🔓 အုပ်စုပြန်ဖွင့်ရန်") {
     await sendGroupPicker(env, chatId, "unban");
     return true;
   }
 
   const prompts = {
-    "✅ User ခွင့်ပြုရန်": "User ID နဲ့ ရက်အရေအတွက်ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/approve USER_ID 30\n\nနောက်အဆင့်မှာ ID မရိုက်ဘဲ ရွေးနိုင်တဲ့ Button စနစ် ထည့်ပေးမယ်။",
-    "🚫 User ပိတ်ရန်": "ပိတ်မယ့် User ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/ban USER_ID",
-    "🔓 User ပြန်ဖွင့်ရန်": "ပြန်ဖွင့်မယ့် User ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/unban USER_ID",
+    "✅ အသုံးပြုခွင့်ပေးရန်": "User ID နဲ့ ရက်အရေအတွက်ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/approve USER_ID 30\n\nနောက်အဆင့်မှာ ID မရိုက်ဘဲ ရွေးနိုင်တဲ့ Button စနစ် ထည့်ပေးမယ်။",
+    "🚫 အသုံးပြုခွင့်ပိတ်ရန်": "ပိတ်မယ့် User ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/ban USER_ID",
+    "🔓 အသုံးပြုခွင့်ပြန်ဖွင့်ရန်": "ပြန်ဖွင့်မယ့် User ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/unban USER_ID",
     "🔢 ဂဏန်းရှာရန်": "စစ်မယ့်ဂဏန်းကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/number 67",
     "📉 သတ်မှတ်ငွေအောက်": "ငွေပမာဏကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/below 5000",
     "📈 သတ်မှတ်ငွေအထက်": "ငွေပမာဏကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/above 10000"
@@ -1748,9 +1861,9 @@ async function sendGroupPicker(env, chatId, action) {
   }
 
   const actionLabels = {
-    approve: "✅ ခွင့်ပြုမည့် Group ရွေးပါ",
-    ban: "🚫 ပိတ်မည့် Group ရွေးပါ",
-    unban: "🔓 ပြန်ဖွင့်မည့် Group ရွေးပါ"
+    approve: "✅ ခွင့်ပြုမည့်အုပ်စုကို ရွေးပါ",
+    ban: "🚫 ပိတ်မည့်အုပ်စုကို ရွေးပါ",
+    unban: "🔓 ပြန်ဖွင့်မည့်အုပ်စုကို ရွေးပါ"
   };
 
   const buttons = groups.slice(0, 80).map((group) => [{
@@ -1761,7 +1874,7 @@ async function sendGroupPicker(env, chatId, action) {
   await sendMessage(
     env.BOT_TOKEN,
     chatId,
-    actionLabels[action] || "Group ရွေးပါ",
+    actionLabels[action] || "အုပ်စုကို ရွေးပါ",
     { inline_keyboard: buttons }
   );
 }
@@ -1797,15 +1910,15 @@ async function handleAdminCallback(env, callbackQuery) {
     await sendMessage(
       env.BOT_TOKEN,
       chatId,
-      `✅ ခွင့်ပြုမည့် Group\n\n👥 ${group.group_title || "အမည်မရှိ"}\n🆔 ${groupId}\n\nသက်တမ်းရွေးပါ။`,
+      `✅ ခွင့်ပြုမည့်အုပ်စု\n\n👥 ${group.group_title || "အမည်မရှိ"}\n🆔 ${groupId}\n\nသက်တမ်းရွေးပါ။`,
       {
         inline_keyboard: [
           [
-            { text: "30 ရက်", callback_data: `grp:days:${groupId}:30` },
-            { text: "90 ရက်", callback_data: `grp:days:${groupId}:90` }
+            { text: "၃၀ ရက်", callback_data: `grp:days:${groupId}:30` },
+            { text: "၉၀ ရက်", callback_data: `grp:days:${groupId}:90` }
           ],
           [
-            { text: "365 ရက်", callback_data: `grp:days:${groupId}:365` },
+            { text: "၃၆၅ ရက်", callback_data: `grp:days:${groupId}:365` },
             { text: "♾ အမြဲတမ်း", callback_data: `grp:days:${groupId}:forever` }
           ]
         ]
@@ -1890,12 +2003,12 @@ async function answerCallbackQuery(token, callbackQueryId, text = "", showAlert 
 
 function mapAdminButtonToCommand(text) {
   const commands = {
-    "👥 လူစာရင်းကြည့်ရန်": "/users",
-    "📋 Group စာရင်းကြည့်ရန်": "/groups",
-    "📒 Ledger ကြည့်ရန်": "/ledger",
+    "👥 အသုံးပြုသူစာရင်း": "/users",
+    "📋 အုပ်စုစာရင်း": "/groups",
+    "📒 စာရင်းကြည့်ရန်": "/ledger",
     "🎯 မထိုးရသေးသောဂဏန်း": "/untouched",
     "🏆 အများဆုံးဂဏန်း": "/top",
-    "♻️ Ledger ရှင်းရန်": "/resetledger",
+    "♻️ စာရင်းရှင်းရန်": "/resetledger",
     "💰 အရောင်းကြည့်ရန်": "/sales"
   };
 

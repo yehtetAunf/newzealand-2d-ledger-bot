@@ -56,10 +56,11 @@ export default {
           return new Response("OK");
         }
 
-        const message = update.message;
         const chatId = message.chat.id;
-        const from = message.from || {};
+const from = message.from || {};
+const userId = from.id;
 
+const admin = isAdmin(userId, env);
         const originalText = String(
           message.text || ""
         ).trim();
@@ -70,8 +71,6 @@ export default {
 
         const text =
           normalizeCommand(originalText);
-
-        const admin = isAdmin(chatId, env);
 
         /*
          * =========================================

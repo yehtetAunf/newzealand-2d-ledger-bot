@@ -48,7 +48,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "5.0.1"
+        version: "5.0.2"
       });
     }
 
@@ -1061,7 +1061,7 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
 `👑 မင်္ဂလာပါ စီမံသူ
 
 ━━━━━━━━━━━━━━
-✅ New Zealand 2D Ledger Bot v5.0.1
+✅ New Zealand 2D Ledger Bot v5.0.2
 ━━━━━━━━━━━━━━
 
 အောက်က မြန်မာခလုတ်တွေကို နှိပ်ပြီး စီမံနိုင်ပါပြီ။
@@ -1091,9 +1091,15 @@ Admin ထံ Group အသုံးပြုခွင့်တောင်းပ�
             }
 
             const keyboard = canManageGroupLedger
-              ? groupAdminMainKeyboard()
-              : userMainKeyboard();
-            await sendMessage(env.BOT_TOKEN, chatId, buildWelcomeMessage(), keyboard);
+              ? groupAdminMainKeyboard(true)
+              : userMainKeyboard(true);
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              buildWelcomeMessage(),
+              keyboard,
+              message.message_id
+            );
             return new Response("OK");
           }
 
@@ -1676,15 +1682,17 @@ function jsonResponse(
   );
 }
 
-function userMainKeyboard() {
+function userMainKeyboard(selective = false) {
   return {
     keyboard: [
       ["🎲 ၂ဒီထိုးရန်", "📊 စာရင်းကြည့်ရန်"],
       ["🔍 ဂဏန်းရှာရန်", "📖 အသုံးပြုနည်း"],
-      ["💎 အသင်းဝင်ရန်", "📞 စီမံသူဆက်သွယ်ရန်"]
+      ["💎 အသင်းဝင်ရန်", "📞 စီမံသူဆက်သွယ်ရန်"],
+      ["🏠 ပင်မစာမျက်နှာ", "⌨️ ခလုတ်ဖျောက်ရန်"]
     ],
     resize_keyboard: true,
     is_persistent: true,
+    selective,
     input_field_placeholder: "လိုချင်သောလုပ်ဆောင်ချက်ကို ရွေးပါ"
   };
 }
@@ -1727,10 +1735,30 @@ async function handleUserKeyboard(env, chatId, text) {
     return true;
   }
 
+  if (text === "🏠 ပင်မစာမျက်နှာ") {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "🏠 အသုံးပြုသူပင်မစာမျက်နှာ",
+      userMainKeyboard()
+    );
+    return true;
+  }
+
+  if (text === "⌨️ ခလုတ်ဖျောက်ရန်") {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "✅ ခလုတ်တွေကို ဖျောက်ထားပါပြီ။ /start နှိပ်ရင် ပြန်ပေါ်ပါမယ်။",
+      { remove_keyboard: true }
+    );
+    return true;
+  }
+
   return false;
 }
 
-function groupAdminMainKeyboard() {
+function groupAdminMainKeyboard(selective = false) {
   return {
     keyboard: [
       ["🎲 ၂ဒီထိုးရန်", "📊 စာရင်းကြည့်ရန်"],
@@ -1739,15 +1767,37 @@ function groupAdminMainKeyboard() {
       ["📉 ၅,၀၀၀ အောက်", "📈 ၁၀,၀၀၀ အထက်"],
       ["🎯 မထိုးရသေးသောဂဏန်း"],
       ["♻️ စာရင်းရှင်းရန်"],
-      ["💎 အသင်းဝင်ရန်", "📞 စီမံသူဆက်သွယ်ရန်"]
+      ["💎 အသင်းဝင်ရန်", "📞 စီမံသူဆက်သွယ်ရန်"],
+      ["🏠 ပင်မစာမျက်နှာ", "⌨️ ခလုတ်ဖျောက်ရန်"]
     ],
     resize_keyboard: true,
     is_persistent: true,
+    selective,
     input_field_placeholder: "အုပ်စုစီမံလုပ်ဆောင်ချက်ကို ရွေးပါ"
   };
 }
 
 async function handleGroupAdminKeyboard(env, chatId, text) {
+  if (text === "🏠 ပင်မစာမျက်နှာ") {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "👑 အုပ်စုစီမံသူ ပင်မစာမျက်နှာ",
+      groupAdminMainKeyboard()
+    );
+    return true;
+  }
+
+  if (text === "⌨️ ခလုတ်ဖျောက်ရန်") {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "✅ ခလုတ်တွေကို ဖျောက်ထားပါပြီ။ /start နှိပ်ရင် ပြန်ပေါ်ပါမယ်။",
+      { remove_keyboard: true }
+    );
+    return true;
+  }
+
   if (text === "♻️ စာရင်းရှင်းရန်") {
     await sendMessage(
       env.BOT_TOKEN,
@@ -2124,7 +2174,8 @@ async function sendMessage(
   token,
   chatId,
   text,
-  replyMarkup = null
+  replyMarkup = null,
+  replyToMessageId = null
 ) {
   if (!token) {
     throw new Error(

@@ -3,6 +3,15 @@ import { parseBetMessage } from "./parser.js";
 import {
   getUser,
   createUser,
+  updateLicense,
+
+  getLicensedGroup,
+  createLicensedGroup,
+  approveGroup,
+banGroup,
+unbanGroup,
+  getLicensedGroups,
+
   addBetItemsToNumberTotals,
   getNumberTotals,
   getNumberTotal,
@@ -60,6 +69,11 @@ const message = update.message;
 const from = message.from || {};
 const userId = from.id;
 
+const chatType = message.chat.type;
+const isGroup =
+  chatType === "group" ||
+  chatType === "supergroup";
+
 const admin = isAdmin(userId, env);
         const originalText = String(
           message.text || ""
@@ -70,7 +84,27 @@ const admin = isAdmin(userId, env);
         }
 
         const text =
-          normalizeCommand(originalText);
+  normalizeCommand(originalText);
+
+if (isGroup) {
+  const groupTitle =
+    message.chat.title || "";
+
+  const existingGroup =
+    await getLicensedGroup(
+      env.DB,
+      chatId
+    );
+
+  if (!existingGroup) {
+    await createLicensedGroup(
+      env.DB,
+      chatId,
+      userId,
+      groupTitle
+    );
+  }
+}
 
         /*
          * =========================================
@@ -1132,23 +1166,51 @@ Ledger Commands
          * =========================================
          */
         if (!admin) {
-          const user = await getUser(
-            env.DB,
-            userId
-          );
 
-          const access =
-            hasAccess(user);
+  if (isGroup) {
 
-          if (!access.ok) {
-            await sendMessage(
-              env.BOT_TOKEN,
-              chatId,
-              access.message
-            );
+    const group =
+      await getLicensedGroup(
+        env.DB,
+        chatId
+      );
 
-            return new Response("OK");
-          }
+    const access =
+      hasAccess(group);
+
+    if (!access.ok) {
+      await sendMessage(
+        env.BOT_TOKEN,
+        chatId,
+        "🔒 ဒီ Group ကို အသုံးပြုခွင့် မပေးရသေးပါ။\n\nAdmin ကို ဆက်သွယ်ပြီး Group License ရယူပါ။"
+      );
+
+      return new Response("OK");
+    }
+
+  } else {
+
+    const user =
+      await getUser(
+        env.DB,
+        userId
+      );
+
+    const access =
+      hasAccess(user);
+
+    if (!access.ok) {
+      await sendMessage(
+        env.BOT_TOKEN,
+        chatId,
+        access.message
+      );
+
+      return new Response("OK");
+    }
+
+  }
+
         }
 
         /*

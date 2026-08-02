@@ -41,8 +41,8 @@ const FIXED_RULE_COUNTS = Object.freeze({
 
   ညီကို: 20,
 
-  ဆယ်ပြည့်: 20,
-  ဆယ်ပြည့်: 20,
+  ဆယ်ပြည့်: 10,
+  ဆယ်ပြည့်: 10,
 
   စုံစုံ: 25,
   မမ: 25,
@@ -540,59 +540,58 @@ export function normalizeFixedRuleName(
     ruleName ?? ""
   )
     .trim()
-    .replace(/\s+/g, "");
+    .replace(/\s+/g, "")
+    .toLowerCase();
 
-  if (
-    value === "အပူး" ||
-    value === "အပူးစုံ" ||
-    value === "ပူးစုံ"
-  ) {
-    return "အပူး";
-  }
-if (value === "စုံပူး") {
-  return "စုံပူး";
-}
+  const aliases = {
+    "အပူး": "အပူး",
+    "အပူးစုံ": "အပူး",
+    "ပူးစုံ": "အပူး",
+    "apu": "အပူး",
+    "double": "အပူး",
 
-if (value === "မပူး") {
-  return "မပူး";
-}
-  if (value === "ပါဝါ") {
-    return "ပါဝါ";
-  }
+    "စုံပူး": "စုံပူး",
+    "sp": "စုံပူး",
+    "evendouble": "စုံပူး",
 
-  if (
-    value === "နက္ခတ်" ||
-    value === "နခတ်"
-  ) {
-    return "နက္ခတ်";
-  }
-if (
-  value === "ဆယ်ပြည့်" ||
-  value === "ဆယ်ပြည့်"
-) {
-  return "ဆယ်ပြည့်";
-}
-  if (value === "ညီကို") {
-    return "ညီကို";
-  }
+    "မပူး": "မပူး",
+    "mp": "မပူး",
+    "odddouble": "မပူး",
 
-  if (value === "စုံစုံ") {
-    return "စုံစုံ";
-  }
+    "ပါဝါ": "ပါဝါ",
+    "p": "ပါဝါ",
+    "power": "ပါဝါ",
 
-  if (value === "မမ") {
-    return "မမ";
-  }
+    "နက္ခတ်": "နက္ခတ်",
+    "နခတ်": "နက္ခတ်",
+    "n": "နက္ခတ်",
+    "nakhat": "နက္ခတ်",
 
-  if (value === "စုံမ") {
-    return "စုံမ";
-  }
+    "ညီကို": "ညီကို",
+    "t": "ညီကို",
+    "twin": "ညီကို",
+    "nyiko": "ညီကို",
 
-  if (value === "မစုံ") {
-    return "မစုံ";
-  }
+    "ဆယ်ပြည့်": "ဆယ်ပြည့်",
+    "ဆယ်ပြည့်": "ဆယ်ပြည့်",
+    "s": "ဆယ်ပြည့်",
+    "ten": "ဆယ်ပြည့်",
+    "sal": "ဆယ်ပြည့်",
 
-  return null;
+    "စုံစုံ": "စုံစုံ",
+    "ss": "စုံစုံ",
+
+    "မမ": "မမ",
+    "mm": "မမ",
+
+    "စုံမ": "စုံမ",
+    "sm": "စုံမ",
+
+    "မစုံ": "မစုံ",
+    "ms": "မစုံ"
+  };
+
+  return aliases[value] || null;
 }
 
 /**
@@ -1317,13 +1316,11 @@ export const SPECIAL_RULE_NUMBERS = Object.freeze({
   ]),
 
   /*
-   * ဆယ်ပြည့် — ® ပါဝင်ပြီး 20 ကွက်
+   * ဆယ်ပြည့် — ® ပါဝင်ပြီး 10 ကွက်
    */
   "ဆယ်ပြည့်": Object.freeze([
     "00", "19", "91", "28", "82",
-    "37", "73", "46", "64", "55",
-    "10", "18", "27", "36", "45",
-    "54", "63", "72", "81", "90"
+    "37", "73", "46", "64", "55"
   ]),
 
   "မမ": Object.freeze([
@@ -1363,65 +1360,7 @@ export const SPECIAL_RULE_NUMBERS = Object.freeze({
  * Special Rule အမည်ကို Standard Name ပြောင်းမယ်။
  */
 export function normalizeSpecialRuleName(ruleName) {
-  const value = String(ruleName ?? "")
-    .trim()
-    .replace(/\s+/g, "");
-
-  if (
-    value === "အပူး" ||
-    value === "အပူးစုံ" ||
-    value === "ပူးစုံ"
-  ) {
-    return "အပူး";
-  }
-
-  if (value === "စုံပူး") {
-    return "စုံပူး";
-  }
-
-  if (value === "မပူး") {
-    return "မပူး";
-  }
-
-  if (value === "ပါဝါ") {
-    return "ပါဝါ";
-  }
-
-  if (
-    value === "နက္ခတ်" ||
-    value === "နခတ်"
-  ) {
-    return "နက္ခတ်";
-  }
-
-  if (value === "ညီကို") {
-    return "ညီကို";
-  }
-
-  if (
-    value === "ဆယ်ပြည့်" ||
-    value === "ဆယ်ပြည့်"
-  ) {
-    return "ဆယ်ပြည့်";
-  }
-
-  if (value === "မမ") {
-    return "မမ";
-  }
-
-  if (value === "စုံစုံ") {
-    return "စုံစုံ";
-  }
-
-  if (value === "စုံမ") {
-    return "စုံမ";
-  }
-
-  if (value === "မစုံ") {
-    return "မစုံ";
-  }
-
-  return null;
+  return normalizeFixedRuleName(ruleName);
 }
 
 /*
@@ -1465,6 +1404,96 @@ export function expandSpecialRule(ruleName) {
     count: numbers.length
   };
 }
+
+/*
+ * =========================================
+ * ဘရိတ် / Break Rule
+ * Reverse ပါပြီး Rule တစ်ခုလျှင် 10 ကွက်
+ * =========================================
+ */
+
+export const BREAK_RULE_NUMBERS = Object.freeze({
+  "0": Object.freeze([
+    "00", "19", "91", "28", "82",
+    "37", "73", "46", "64", "55"
+  ]),
+  "1": Object.freeze([
+    "10", "01", "29", "92", "38",
+    "83", "47", "74", "56", "65"
+  ]),
+  "2": Object.freeze([
+    "11", "02", "20", "39", "93",
+    "48", "84", "57", "75", "66"
+  ]),
+  "3": Object.freeze([
+    "12", "21", "03", "30", "49",
+    "94", "58", "85", "67", "76"
+  ]),
+  "4": Object.freeze([
+    "22", "04", "40", "31", "13",
+    "59", "95", "68", "86", "77"
+  ]),
+  "5": Object.freeze([
+    "14", "41", "23", "32", "05",
+    "50", "69", "96", "78", "87"
+  ]),
+  "6": Object.freeze([
+    "15", "51", "24", "42", "06",
+    "60", "33", "79", "97", "88"
+  ]),
+  "7": Object.freeze([
+    "16", "61", "25", "52", "07",
+    "70", "34", "43", "89", "98"
+  ]),
+  "8": Object.freeze([
+    "17", "71", "26", "62", "08",
+    "80", "35", "53", "44", "99"
+  ]),
+  "9": Object.freeze([
+    "18", "81", "27", "72", "09",
+    "90", "36", "63", "45", "54"
+  ])
+});
+
+export function isBreakKeyword(value) {
+  const keyword = String(value ?? "")
+    .trim()
+    .toLowerCase();
+
+  return [
+    "ဘရိတ်",
+    "b",
+    "br",
+    "break",
+    "brake"
+  ].includes(keyword);
+}
+
+export function getBreakRuleNumbers(digit) {
+  const value = String(digit ?? "").trim();
+
+  if (!/^[0-9]$/.test(value)) {
+    throw new Error(
+      "ဘရိတ်အတွက် 0 မှ 9 အတွင်း " +
+      "ဂဏန်းတစ်လုံး ထည့်ပါ။"
+    );
+  }
+
+  return [...BREAK_RULE_NUMBERS[value]];
+}
+
+export function expandBreakRule(digit) {
+  const value = String(digit ?? "").trim();
+  const numbers = getBreakRuleNumbers(value);
+
+  return {
+    rule: "ဘရိတ်",
+    digit: value,
+    numbers,
+    count: numbers.length
+  };
+}
+
 /**
  * =========================================
  * END OF FILE

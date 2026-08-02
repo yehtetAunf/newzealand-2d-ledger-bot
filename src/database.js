@@ -525,3 +525,199 @@ export async function resetTransactions(db) {
     .prepare(`DELETE FROM transactions`)
     .run();
 }
+/*
+ * =========================================
+ * GROUP LICENSE FUNCTIONS
+ * =========================================
+ */
+
+export async function ensureLicensedGroups(
+  db
+) {
+  return db
+    .prepare(`
+      CREATE TABLE IF NOT EXISTS licensed_groups
+      (
+        group_id INTEGER PRIMARY KEY,
+        owner_id INTEGER,
+        group_title TEXT,
+
+        status TEXT DEFAULT 'pending',
+        plan TEXT DEFAULT 'none',
+
+        expires_at TEXT,
+
+        created_at TEXT,
+        updated_at TEXT
+      )
+    `)
+    .run();
+}
+
+/*
+ * Group License တစ်ခု ရှာမယ်
+ */
+export async function getLicensedGroup(
+  db,
+  groupId
+) {
+  await ensureLicensedGroups(db);
+
+  return db
+    .prepare(`
+      SELECT *
+      FROM licensed_groups
+      WHERE group_id = ?
+    `)
+    .bind(groupId)
+    .first();
+}
+
+/*
+ * Group ကို Pending အဖြစ် Register လုပ်မယ်
+ */
+export async function createLicensedGroup(
+  db,
+  groupId,
+  ownerId,
+  groupTitle
+) {
+  await ensureLicensedGroups(db);
+
+  const now =
+    new Date().toISOString();
+
+  return db
+    .prepare(`
+      INSERT OR IGNORE INTO licensed_groups
+      (
+        group_id,
+        owner_id,
+        group_title,
+        status,
+        plan,
+        expires_at,
+        created_at,
+        updated_at
+      )
+      VALUES
+      (
+        ?,
+        ?,
+        ?,
+        'pending',
+        'none',
+        NULL,
+        ?,
+        ?
+      )
+    `)
+    .bind(
+      groupId,
+      ownerId || null,
+      groupTitle || "",
+      now,
+      now
+    )
+    .run();
+}
+
+/*
+ * Group ကို Approve လုပ်မယ်
+ */
+export async function approveGroup(
+  db,
+  groupId,
+  plan,
+  expiresAt
+) {
+  await ensureLicensedGroups(db);
+
+  const now =
+    new Date().toISOString();
+
+  return db
+    .prepare(`
+      UPDATE licensed_groups
+      SET
+        status = 'approved',
+        plan = ?,
+        expires_at = ?,
+        updated_at = ?
+      WHERE group_id = ?
+    `)
+    .bind(
+      plan,
+      expiresAt,
+      now,
+      groupId
+    )
+    .run();
+}
+
+/*
+ * Group ကို Ban လုပ်မယ်
+ */
+export async function banGroup(
+  db,
+  groupId
+) {
+  await ensureLicensedGroups(db);
+
+  return db
+    .prepare(`
+      UPDATE licensed_groups
+      SET
+        status = 'banned',
+        updated_at = ?
+      WHERE group_id = ?
+    `)
+    .bind(
+      new Date().toISOString(),
+      groupId
+    )
+    .run();
+}
+
+/*
+ * Group ကို Unban လုပ်မယ်
+ */
+export async function unbanGroup(
+  db,
+  groupId
+) {
+  await ensureLicensedGroups(db);
+
+  return db
+    .prepare(`
+      UPDATE licensed_groups
+      SET
+        status = 'approved',
+        updated_at = ?
+      WHERE group_id = ?
+    `)
+    .bind(
+      new Date().toISOString(),
+      groupId
+    )
+    .run();
+}
+
+/*
+ * Group အားလုံးရဲ့ စာရင်းယူမယ်
+ */
+export async function getLicensedGroups(
+  db
+) {
+  await ensureLicensedGroups(db);
+
+  const { results } = await db
+    .prepare(`
+      SELECT *
+      FROM licensed_groups
+      ORDER BY created_at DESC
+    `)
+    .all();
+
+  return results;
+  }

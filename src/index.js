@@ -1050,6 +1050,7 @@ Admin ထံ Group အသုံးပြုခွင့်တောင်းပ�
           }
 
           const access = hasAccess(user);
+          await sendMessage(env.BOT_TOKEN, chatId, buildWelcomeMessage());
           if (!access.ok) {
             await sendMessage(
               env.BOT_TOKEN,
@@ -1084,7 +1085,7 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
             return new Response("OK");
           }
 
-          await sendMessage(env.BOT_TOKEN, chatId, buildWelcomeMessage());
+          
           return new Response("OK");
         }
 

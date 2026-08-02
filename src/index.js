@@ -931,11 +931,68 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
               hasAccess(user);
 
             if (!access.ok) {
-              await sendMessage(
-                env.BOT_TOKEN,
-                chatId,
-                access.message
-              );
+              await sendLongMessage(
+            env.BOT_TOKEN,
+            chatId,
+`📖 အသုံးပြုပုံ
+
+🔹 Direct / Reverse
+67 500
+67R500
+67R 500
+67R 78R 90R 500
+67-78-90 R200
+14.58.18.56R100
+
+🔹 Carry Amount
+16.27.38.49.50
+12.23.34.45.56
+67.78.89.90.10 R50
+
+🔹 အခွေ / အခွေပူး
+1369ခွေ300
+1369 အခွေ 300
+1369ခွေပူး100
+1369အခွေပူး 100
+185376ခပ200
+
+🔹 ကပ်ဂဏန်း
+1369.04578ကပ်R250
+1369/04578 R250
+67/12345890 R 500
+
+🔹 Special Rules — မြန်မာ / English
+နက္ခတ်500  |  n500
+ပါဝါ500    |  p500
+ဆယ်ပြည့်500 |  s500
+ညီကို500   |  t500
+အပူး200    |  apu200
+စုံပူး200   |  sp200
+မပူး200     |  mp200
+မမ200       |  mm200
+စုံစုံ200    |  ss200
+
+🔹 ဘရိတ် / Break
+0ဘရိတ်200
+1 ဘရိတ် 500
+5br500
+7 break 500
+
+🔹 ပါတ် / ထိပ် / ပိတ်
+8/9ပါတ်500
+1/7 ထိပ် 500
+3/5ပိတ်500
+
+📊 Ledger Commands
+/ledger
+/untouched
+/top
+/top 20
+/number 67
+/below 5000
+/above 10000
+/mysales`
+          );
 
               return new Response("OK");
             }
@@ -1152,36 +1209,76 @@ ${reportLines}
 
           if (
             errorMessage.includes(
+              "နောက်ဆုံးစာကြောင်းတွင် R/®"
+            )
+          ) {
+            reply =
+`❌ စာရင်းပုံစံ မမှန်ပါ။
+
+နောက်ဆုံးစာကြောင်းတွင်
+R/® နှင့် ထိုးငွေ မတွေ့ပါ။
+
+မှန်ကန်သောပုံစံ
+
+16.27.38.49.50
+12.23.34.45.56
+67.78.89.90.10 R50`;
+          } else if (
+            errorMessage.includes(
               "ထိုးငွေ (Amount) မတွေ့ပါ"
             ) ||
             errorMessage.includes(
               "နောက်ဆုံးတွင် ထိုးငွေထည့်ပါ"
             )
           ) {
+            const cleanInput =
+              originalText.trim();
+
+            const smartExample =
+              /^\d{3,8}$/.test(cleanInput)
+                ? `${cleanInput} အခွေ 500`
+                : `${cleanInput} 500`;
+
             reply =
 `❌ စာရင်းပုံစံ မမှန်ပါ။
 
 ထိုးငွေ (Amount) မတွေ့ပါ။
 
-ဥပမာ
-67-78-90 R 500`;
+မှန်ကန်သောပုံစံ
+${smartExample}`;
           } else if (
             errorMessage.includes(
               "အကွက်အမျိုးအစား"
             )
           ) {
+            const digits =
+              originalText.trim();
+
             reply =
 `❌ စာရင်းပုံစံ မမှန်ပါ။
 
 အကွက်အမျိုးအစား (အခွေ/အခွေပူး) မပါပါ။
 
-ဥပမာ
-60147 အခွေ 500`;
+မှန်ကန်သောပုံစံ
+${digits} အခွေ 500`;
           } else {
+            const lineMatch =
+              errorMessage.match(
+                /စာကြောင်း\s+(\d+)/
+              );
+
+            const lineNumber =
+              lineMatch?.[1] || "1";
+
             reply =
 `❌ စာရင်းပုံစံ မမှန်ပါ။
 
-${errorMessage}
+📄 စာကြောင်း (${lineNumber})
+
+📝 သင်ရိုက်ထားသောစာ
+${originalText}
+
+❗ ဒီစာရင်းအမျိုးအစားကို Bot က နားမလည်ပါ။
 
 အသုံးပြုပုံကြည့်ရန် /help ကိုနှိပ်ပါ။`;
           }

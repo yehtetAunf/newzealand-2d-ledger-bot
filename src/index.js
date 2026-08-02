@@ -48,7 +48,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "4.1.0"
+        version: "4.2.0"
       });
     }
 
@@ -79,8 +79,23 @@ export default {
           return new Response("OK");
         }
 
-        const text = normalizeCommand(originalText);
+        let text = normalizeCommand(originalText);
         const now = new Date();
+
+        // Admin မြန်မာ Reply Keyboard ကို Private Chat မှာသာ ပြမယ်။
+        if (admin && !isGroup) {
+          const menuHandled = await handleAdminKeyboard(
+            env.BOT_TOKEN,
+            chatId,
+            text
+          );
+
+          if (menuHandled) {
+            return new Response("OK");
+          }
+
+          text = mapAdminButtonToCommand(text);
+        }
 
         if (isGroup) {
           const groupTitle = message.chat.title || "";
@@ -985,31 +1000,12 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
 `👑 မင်္ဂလာပါ Admin
 
 ━━━━━━━━━━━━━━
-✅ New Zealand 2D Ledger Bot v4.1
+✅ New Zealand 2D Ledger Bot v4.2
 ━━━━━━━━━━━━━━
 
-🛠 User Commands
-👥 /users
-✅ /approve USER_ID DAYS
-🚫 /ban USER_ID
-🔓 /unban USER_ID
-
-🛠 Group Commands
-🆔 /groupid
-👥 /groups
-✅ /approvegroup GROUP_ID DAYS
-🚫 /bangroup GROUP_ID
-🔓 /unbangroup GROUP_ID
-
-📊 Ledger Commands
-📒 /ledger
-🎯 /untouched
-🏆 /top
-🔢 /number 67
-💰 /below 5000
-💎 /above 10000
-📈 /sales
-🗑 /resetledger`
+အောက်က မြန်မာခလုတ်တွေကို နှိပ်ပြီး စီမံနိုင်ပါပြီ။
+Command တွေလည်း ဆက်လက်အသုံးပြုနိုင်ပါတယ်။`,
+              adminMainKeyboard()
             );
             return new Response("OK");
           }
@@ -1616,6 +1612,125 @@ function jsonResponse(
   );
 }
 
+function adminMainKeyboard() {
+  return {
+    keyboard: [
+      ["👤 အသုံးပြုသူများ", "👥 Group များ"],
+      ["📊 Ledger စီမံရန်", "💰 အရောင်းကြည့်ရန်"],
+      ["⌨️ ခလုတ်ဖျောက်ရန်"]
+    ],
+    resize_keyboard: true,
+    is_persistent: true,
+    input_field_placeholder: "Admin လုပ်ဆောင်ချက်ရွေးပါ"
+  };
+}
+
+function adminUserKeyboard() {
+  return {
+    keyboard: [
+      ["👥 လူစာရင်းကြည့်ရန်"],
+      ["✅ User ခွင့်ပြုရန်", "🚫 User ပိတ်ရန်"],
+      ["🔓 User ပြန်ဖွင့်ရန်"],
+      ["🔙 ပင်မစာမျက်နှာ"]
+    ],
+    resize_keyboard: true,
+    is_persistent: true
+  };
+}
+
+function adminGroupKeyboard() {
+  return {
+    keyboard: [
+      ["📋 Group စာရင်းကြည့်ရန်"],
+      ["✅ Group ခွင့်ပြုရန်", "🚫 Group ပိတ်ရန်"],
+      ["🔓 Group ပြန်ဖွင့်ရန်"],
+      ["🔙 ပင်မစာမျက်နှာ"]
+    ],
+    resize_keyboard: true,
+    is_persistent: true
+  };
+}
+
+function adminLedgerKeyboard() {
+  return {
+    keyboard: [
+      ["📒 Ledger ကြည့်ရန်", "🎯 မထိုးရသေးသောဂဏန်း"],
+      ["🏆 အများဆုံးဂဏန်း", "🔢 ဂဏန်းရှာရန်"],
+      ["📉 သတ်မှတ်ငွေအောက်", "📈 သတ်မှတ်ငွေအထက်"],
+      ["♻️ Ledger ရှင်းရန်"],
+      ["🔙 ပင်မစာမျက်နှာ"]
+    ],
+    resize_keyboard: true,
+    is_persistent: true
+  };
+}
+
+async function handleAdminKeyboard(token, chatId, text) {
+  if (text === "👤 အသုံးပြုသူများ") {
+    await sendMessage(token, chatId, "👤 အသုံးပြုသူ စီမံခန့်ခွဲမှု", adminUserKeyboard());
+    return true;
+  }
+
+  if (text === "👥 Group များ") {
+    await sendMessage(token, chatId, "👥 Group စီမံခန့်ခွဲမှု", adminGroupKeyboard());
+    return true;
+  }
+
+  if (text === "📊 Ledger စီမံရန်") {
+    await sendMessage(token, chatId, "📊 Ledger လုပ်ဆောင်ချက်ရွေးပါ", adminLedgerKeyboard());
+    return true;
+  }
+
+  if (text === "💰 အရောင်းကြည့်ရန်") {
+    return false;
+  }
+
+  if (text === "🔙 ပင်မစာမျက်နှာ") {
+    await sendMessage(token, chatId, "👑 Admin ပင်မစာမျက်နှာ", adminMainKeyboard());
+    return true;
+  }
+
+  if (text === "⌨️ ခလုတ်ဖျောက်ရန်") {
+    await sendMessage(token, chatId, "✅ ခလုတ်တွေကို ဖျောက်ထားပါပြီ။ /start နှိပ်ရင် ပြန်ပေါ်ပါမယ်။", {
+      remove_keyboard: true
+    });
+    return true;
+  }
+
+  const prompts = {
+    "✅ User ခွင့်ပြုရန်": "User ID နဲ့ ရက်အရေအတွက်ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/approve USER_ID 30\n\nနောက်အဆင့်မှာ ID မရိုက်ဘဲ ရွေးနိုင်တဲ့ Button စနစ် ထည့်ပေးမယ်။",
+    "🚫 User ပိတ်ရန်": "ပိတ်မယ့် User ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/ban USER_ID",
+    "🔓 User ပြန်ဖွင့်ရန်": "ပြန်ဖွင့်မယ့် User ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/unban USER_ID",
+    "✅ Group ခွင့်ပြုရန်": "Group ID နဲ့ ရက်အရေအတွက်ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/approvegroup GROUP_ID 30",
+    "🚫 Group ပိတ်ရန်": "ပိတ်မယ့် Group ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/bangroup GROUP_ID",
+    "🔓 Group ပြန်ဖွင့်ရန်": "ပြန်ဖွင့်မယ့် Group ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/unbangroup GROUP_ID",
+    "🔢 ဂဏန်းရှာရန်": "စစ်မယ့်ဂဏန်းကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/number 67",
+    "📉 သတ်မှတ်ငွေအောက်": "ငွေပမာဏကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/below 5000",
+    "📈 သတ်မှတ်ငွေအထက်": "ငွေပမာဏကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/above 10000"
+  };
+
+  if (prompts[text]) {
+    await sendMessage(token, chatId, prompts[text]);
+    return true;
+  }
+
+  return false;
+}
+
+function mapAdminButtonToCommand(text) {
+  const commands = {
+    "👥 လူစာရင်းကြည့်ရန်": "/users",
+    "📋 Group စာရင်းကြည့်ရန်": "/groups",
+    "📒 Ledger ကြည့်ရန်": "/ledger",
+    "🎯 မထိုးရသေးသောဂဏန်း": "/untouched",
+    "🏆 အများဆုံးဂဏန်း": "/top",
+    "♻️ Ledger ရှင်းရန်": "/resetledger",
+    "💰 အရောင်းကြည့်ရန်": "/sales"
+  };
+
+  return commands[text] || text;
+}
+
 async function sendLongMessage(
   token,
   chatId,
@@ -1642,7 +1757,8 @@ async function sendLongMessage(
 async function sendMessage(
   token,
   chatId,
-  text
+  text,
+  replyMarkup = null
 ) {
   if (!token) {
     throw new Error(
@@ -1660,7 +1776,10 @@ async function sendMessage(
       },
       body: JSON.stringify({
         chat_id: chatId,
-        text
+        text,
+        ...(replyMarkup
+          ? { reply_markup: replyMarkup }
+          : {})
       })
     }
   );

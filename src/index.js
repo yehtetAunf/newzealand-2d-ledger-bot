@@ -48,7 +48,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "5.0.3"
+        version: "5.0.4"
       });
     }
 
@@ -1061,7 +1061,7 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
 `👑 မင်္ဂလာပါ စီမံသူ
 
 ━━━━━━━━━━━━━━
-✅ New Zealand 2D Ledger Bot v5.0.2
+✅ New Zealand 2D Ledger Bot v5.0.4
 ━━━━━━━━━━━━━━
 
 အောက်က မြန်မာခလုတ်တွေကို နှိပ်ပြီး စီမံနိုင်ပါပြီ။
@@ -1091,14 +1091,13 @@ Admin ထံ Group အသုံးပြုခွင့်တောင်းပ�
             }
 
             const keyboard = canManageGroupLedger
-              ? groupAdminMainKeyboard(true)
-              : userMainKeyboard(true);
+              ? groupAdminMainKeyboard(false)
+              : userMainKeyboard(false);
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
               buildWelcomeMessage(),
-              keyboard,
-              message.message_id
+              keyboard
             );
             return new Response("OK");
           }
@@ -2158,23 +2157,12 @@ async function sendLongMessage(
 
 async function isTelegramGroupAdmin(token, chatId, userId) {
   try {
-    if (!token || !chatId || !userId) return false;
-
     const response = await fetch(
       `https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(chatId)}&user_id=${encodeURIComponent(userId)}`
     );
-
     const data = await response.json();
-
-    if (!data.ok || !data.result) {
-      return false;
-    }
-
-    const status = String(data.result.status || "");
-
-    // creator / administrator သာ Group Admin အဖြစ် သတ်မှတ်မည်
-    // member / restricted / left / kicked များကို Admin မသတ်မှတ်ပါ
-    return status === "creator" || status === "administrator";
+    if (!data.ok || !data.result) return false;
+    return data.result.status === "creator" || data.result.status === "administrator";
   } catch (error) {
     console.error("Group admin check failed:", error);
     return false;

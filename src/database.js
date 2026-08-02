@@ -345,6 +345,7 @@ export async function getTopNumbers(
         number,
         total_amount
       FROM number_totals
+      WHERE total_amount > 0
       ORDER BY
         total_amount DESC,
         number ASC
@@ -518,4 +519,4 @@ export async function resetNumberTotals(
       new Date().toISOString()
     )
     .run();
-  }
+}

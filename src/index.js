@@ -821,21 +821,28 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
 
 ✅ New Zealand 2D Ledger Bot
 
-Admin Commands
+━━━━━━━━━━━━━━
 
-/users
-/approve CHAT_ID DAYS
-/approve CHAT_ID forever
-/ban CHAT_ID
-/unban CHAT_ID
-/ledger
-/untouched
-/top
-/number 67
-/below 5000
-/above 10000
-/sales
-/resetledger`
+🛠 Admin Control Panel
+
+👥 /users - User စာရင်း
+✅ /approve CHAT_ID DAYS
+♾ /approve CHAT_ID forever
+🚫 /ban CHAT_ID
+🔓 /unban CHAT_ID
+
+━━━━━━━━━━━━━━
+
+📊 Ledger Commands
+
+📒 /ledger
+🎯 /untouched
+🏆 /top
+🔢 /number 67
+💰 /below 5000
+💎 /above 10000
+📈 /sales
+🗑 /resetledger`
             );
 
             return new Response("OK");

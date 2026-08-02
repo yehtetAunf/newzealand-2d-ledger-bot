@@ -62,11 +62,11 @@ export function parseBetMessage(inputText) {
             entry.text
           )
         : carryAmount && isBeforeLast
-          ? parseBetExpression(
-              entry.text,
-              carryAmount,
-              entry.text
-            )
+  ? parseBetExpression(
+      `${entry.text} R`,
+      carryAmount,
+      `${entry.text}R`
+    )
           : parseBetLine(entry.text);
 
       allItems.push(...lineItems);

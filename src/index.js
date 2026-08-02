@@ -794,25 +794,23 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
          */
         if (text === "/start") {
           let user = await getUser(
-            env.DB,
-            chatId
-          );
+  env.DB,
+  userId
+);
 
-          const isNewUser = !user;
+if (!user) {
+  await createUser(
+    env.DB,
+    userId,
+    from.username || "",
+    from.first_name || ""
+  );
 
-          if (!user) {
-            await createUser(
-              env.DB,
-              chatId,
-              from.username || "",
-              from.first_name || ""
-            );
-
-            user = await getUser(
-              env.DB,
-              chatId
-            );
-          }
+  user = await getUser(
+    env.DB,
+    userId
+  );
+}
 
           if (admin) {
             await sendMessage(

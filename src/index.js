@@ -48,7 +48,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "4.0.0"
+        version: "4.1.0"
       });
     }
 
@@ -985,7 +985,7 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
 `👑 မင်္ဂလာပါ Admin
 
 ━━━━━━━━━━━━━━
-✅ New Zealand 2D Ledger Bot v4.0
+✅ New Zealand 2D Ledger Bot v4.1
 ━━━━━━━━━━━━━━
 
 🛠 User Commands

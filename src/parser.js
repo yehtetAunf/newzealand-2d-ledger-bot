@@ -182,23 +182,6 @@ function parseTokenAt(
   const nextToken =
     tokens[index + 1] || "";
 
-  /*
-   * =====================================
-   * Fixed Rules
-   * =====================================
-   *
-   * အပူး
-   * စုံပူး
-   * မပူး
-   * ပါဝါ
-   * နက္ခတ်
-   * ညီကို
-   * ဆယ်ပြည့်
-   * စုံစုံ
-   * မမ
-   * စုံမ
-   * မစုံ
-   */
   if (isFixedCountRule(token)) {
     const fixed =
       getFixedRuleCount(token);
@@ -222,16 +205,6 @@ function parseTokenAt(
     };
   }
 
-  /*
-   * =====================================
-   * အခွေ / အခွေပူး
-   * =====================================
-   *
-   * 60147အခွေ
-   * 60147 အခွေ
-   * 60147ခွေ
-   * 60147 ခွေပူး
-   */
   const attachedKhway =
     parseAttachedKhwayToken(
       token,
@@ -262,15 +235,6 @@ function parseTokenAt(
     };
   }
 
-  /*
-   * =====================================
-   * ပါတ် / ပတ် / ထိပ် / ပိတ်
-   * =====================================
-   *
-   * 1ထိပ်
-   * 1/7ထိပ်
-   * 1/7 ထိပ်
-   */
   const attachedDigitRule =
     parseAttachedDigitRuleToken(
       token,
@@ -301,15 +265,6 @@ function parseTokenAt(
     };
   }
 
-  /*
-   * =====================================
-   * ကပ်ဂဏန်း
-   * =====================================
-   *
-   * 67/12345890
-   * 67/12345890R
-   * 67/12345890 R
-   */
   const gapResult = parseGapToken(
     token,
     nextToken,
@@ -330,17 +285,6 @@ function parseTokenAt(
     };
   }
 
-  /*
-   * =====================================
-   * Direct / Reverse
-   * =====================================
-   *
-   * 67
-   * 67R
-   * 67-78-90
-   * 67-78-90 R
-   * 67R-78-90R
-   */
   const directResult =
     parseDirectToken(
       token,
@@ -366,51 +310,84 @@ function parseTokenAt(
 }
 
 /**
- * Amount ကို နောက်ဆုံးကနေ
- * ခွဲထုတ်မယ်။
+ * Amount ကို နောက်ဆုံးကနေ ခွဲထုတ်မယ်။
  *
+ * လက်ခံမယ့်ပုံစံ:
  * 67R 500
  * 67R500
+ * အပူး500
+ * 60147အခွေ500
  * 12/70/36/27/18®500
+ *
+ * 67/78/53 ကို 53 Amount အဖြစ်
+ * မှားမယူအောင် "/" စတဲ့ separator နောက်က
+ * ဂဏန်းကို attached amount အဖြစ် မယူပါ။
  */
 function extractAmount(line) {
   const value =
     String(line || "").trim();
 
   /*
-   * Space ပါတဲ့ ပုံစံကို
-   * အရင်ယူမယ်။
+   * Space ပါတဲ့ပုံစံကို ဦးစားပေးယူမယ်။
+   *
+   * 67R 500
+   * 60147 အခွေ 500
    */
   let match = value.match(
     /^(.+?)\s+([\d,]+)$/
   );
 
   /*
-   * Rule/Reverse နဲ့ Amount
-   * ကပ်ရေးထားတဲ့ ပုံစံ
+   * Reverse symbol နဲ့ Amount ကပ်ရေးထားခြင်း
    *
+   * 67R500
    * 18®500
-   * အပူး500
-   * 60147အခွေ500
+   * 12/70/36/27/18®500
    */
   if (!match) {
     match = value.match(
-      /^(.+?(?:[Rr®Ⓡ]|[^\d\s]))([\d,]+)$/
+      /^(.+?[Rr®Ⓡ])([\d,]+)$/
+    );
+  }
+
+  /*
+   * Rule နဲ့ Amount ကပ်ရေးထားခြင်း
+   *
+   * အပူး500
+   * 60147အခွေ500
+   * 1/7ထိပ်500
+   */
+  if (!match) {
+    match = value.match(
+      /^(.+?(?:အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ပါတ်|ပတ်|ထိပ်|ပိတ်|အပူးစုံ|အပူး|ပူးစုံ|စုံပူး|မပူး|ပါဝါ|နက္ခတ်|နခတ်|ညီကို|ဆယ်ပြည့်|ဆယ်ပြည့်|စုံစုံ|မမ|စုံမ|မစုံ))([\d,]+)$/
     );
   }
 
   if (!match) {
+    /*
+     * 60147 လို 3 မှ 8 လုံးဂဏန်းတစ်စုတည်းဆို
+     * အခွေ Rule မပါခြင်းအဖြစ် သီးသန့်ပြမယ်။
+     */
+    if (/^\d{3,8}$/.test(value)) {
+      throw new Error(
+        "အကွက်အမျိုးအစား (အခွေ/အခွေပူး) မပါပါ။\n" +
+        "ဥပမာ - 60147 အခွေ 500"
+      );
+    }
+
     throw new Error(
-      "နောက်ဆုံးတွင် ထိုးငွေထည့်ပါ။ " +
-      "ဥပမာ - 67R 500"
+      "ထိုးငွေ (Amount) မတွေ့ပါ။\n" +
+      "ဥပမာ - 67-78-90 R 500"
     );
   }
 
   const expression =
     match[1].trim();
 
-  const amount =
-    match[2].trim();
+  const amountText =
+    match[2]
+      .replace(/,/g, "")
+      .trim();
 
   if (!expression) {
     throw new Error(
@@ -418,18 +395,21 @@ function extractAmount(line) {
     );
   }
 
+  if (
+    !/^\d+$/.test(amountText) ||
+    Number(amountText) <= 0
+  ) {
+    throw new Error(
+      "ထိုးငွေ (Amount) မမှန်ပါ။"
+    );
+  }
+
   return {
     expression,
-    amount
+    amount: amountText
   };
 }
 
-/**
- * Expression ကို Token ခွဲမယ်။
- *
- * Rule + Amount တစ်ကြောင်းစနစ်မှာ
- * Space နဲ့ Bet တစ်ခုချင်း ခွဲမယ်။
- */
 function tokenizeExpression(expression) {
   return String(expression || "")
     .replace(/\u00a0/g, " ")
@@ -440,11 +420,6 @@ function tokenizeExpression(expression) {
     .filter(Boolean);
 }
 
-/**
- * =========================================
- * Direct / Reverse Token
- * =========================================
- */
 function parseDirectToken(
   token,
   nextToken,
@@ -456,24 +431,11 @@ function parseDirectToken(
   let reverseAll = false;
   let usedNextToken = false;
 
-  /*
-   * 67-78-90 R
-   *
-   * R သီးသန့်နောက်မှာပါရင်
-   * Token ထဲက ဂဏန်းအားလုံး Reverse
-   */
   if (isReverseSymbol(nextToken)) {
     reverseAll = true;
     usedNextToken = true;
   }
 
-  /*
-   * Separator Group အဆုံးမှာ
-   * R ကပ်နေရင် Global Reverse
-   *
-   * 67-78-90R
-   * 67.78.90®
-   */
   const attachedGlobalReverse =
     source.match(/([Rr®Ⓡ])$/);
 
@@ -485,10 +447,6 @@ function parseDirectToken(
     source = source.slice(0, -1);
   }
 
-  /*
-   * Separator တွေကို
-   * Space အဖြစ်ပြောင်းမယ်။
-   */
   const parts = source
     .replace(/[\/.,၊_-]+/g, " ")
     .replace(/\s+/g, " ")
@@ -522,10 +480,6 @@ function parseDirectToken(
     reverseAll
   );
 
-  /*
-   * Single Token ကို
-   * Report Line တစ်ကြောင်းစီပြမယ်။
-   */
   if (
     entries.length === 1 &&
     !containsSeparator(token)
@@ -568,14 +522,6 @@ function parseDirectToken(
   };
 }
 
-/**
- * Direct Segment Parse
- *
- * 67
- * 67R
- * 67R78R90
- * 677890
- */
 function parseDirectSegment(segment) {
   const source =
     String(segment || "");
@@ -613,11 +559,6 @@ function parseDirectSegment(segment) {
   return entries;
 }
 
-/**
- * =========================================
- * Attached အခွေ Token
- * =========================================
- */
 function parseAttachedKhwayToken(
   token,
   amount
@@ -641,9 +582,6 @@ function parseAttachedKhwayToken(
   );
 }
 
-/**
- * အခွေ / အခွေပူး Item
- */
 function createKhwayItem(
   digits,
   keyword,
@@ -671,11 +609,6 @@ function createKhwayItem(
   });
 }
 
-/**
- * =========================================
- * Attached ပါတ် / ထိပ် / ပိတ်
- * =========================================
- */
 function parseAttachedDigitRuleToken(
   token,
   amount
@@ -696,9 +629,6 @@ function parseAttachedDigitRuleToken(
   );
 }
 
-/**
- * ပါတ် / ထိပ် / ပိတ် Item
- */
 function createDigitRuleItem(
   digits,
   ruleName,
@@ -734,18 +664,6 @@ function createDigitRuleItem(
   });
 }
 
-/**
- * ပါတ် / ထိပ် / ပိတ် Actual Numbers
- *
- * သတိပြုရန်:
- * ပါတ် Digit အများကြီးဖြစ်ရင်
- * တူညီတဲ့ဂဏန်းကို Rule နှစ်ခုက
- * ထပ်မိနိုင်ပါတယ်။
- *
- * ဥပမာ 1/7 ပါတ်မှာ
- * 17 နဲ့ 71 ကို နှစ်ကြိမ်တွက်ရနိုင်တာကြောင့်
- * Duplicate ကို မဖယ်ပါ။
- */
 function buildDigitRuleNumbers(
   digits,
   ruleName
@@ -779,21 +697,12 @@ function buildDigitRuleNumbers(
     }
 
     if (ruleName === "ပါတ်") {
-      /*
-       * ထိပ် 10 ကွက်
-       */
       for (const second of allDigits) {
         numbers.push(
           `${digit}${second}`
         );
       }
 
-      /*
-       * ပိတ် 9 ကွက်
-       *
-       * အပူးဂဏန်းကို အပေါ်မှာ
-       * ထည့်ထားပြီးဖြစ်တာကြောင့် ကျော်မယ်။
-       */
       for (const first of allDigits) {
         if (first === digit) {
           continue;
@@ -816,11 +725,6 @@ function buildDigitRuleNumbers(
   return numbers;
 }
 
-/**
- * =========================================
- * ကပ်ဂဏန်း Parse
- * =========================================
- */
 function parseGapToken(
   token,
   nextToken,
@@ -853,13 +757,6 @@ function parseGapToken(
     return null;
   }
 
-  /*
-   * နှစ်ဖက်လုံး 2D ပုံစံဖြစ်ရင်
-   * Direct Group အဖြစ်ယူမယ်။
-   *
-   * 12/34 → Direct
-   * 67/12345890 → ကပ်
-   */
   if (
     match[1].length === 2 &&
     match[2].length === 2
@@ -910,21 +807,6 @@ function parseGapToken(
   };
 }
 
-/**
- * ကပ်ဂဏန်း Actual Numbers
- *
- * 67/123
- *
- * 61 62 63
- * 71 72 73
- *
- * R ပါလျှင်
- *
- * 16 26 36
- * 17 27 37
- *
- * ကိုပါ ထည့်မယ်။
- */
 function buildGapNumbers(
   leftDigits,
   rightDigits,
@@ -948,12 +830,6 @@ function buildGapNumbers(
 
   return numbers;
 }
-
-/**
- * =========================================
- * Helper Functions
- * =========================================
- */
 
 function isDigitText(value) {
   return /^[0-9/.,၊_-]+$/.test(
@@ -995,13 +871,10 @@ function containsMultiple2DNumbers(
   );
 }
 
-/**
- * Message Normalize
- */
 function normalizeMessage(text) {
   return String(text || "")
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
     .replace(/\u00a0/g, " ")
     .trim();
-    }
+}

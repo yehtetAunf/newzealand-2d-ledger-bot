@@ -48,7 +48,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "5.0.0"
+        version: "5.0.1"
       });
     }
 
@@ -76,6 +76,10 @@ export default {
           chatType === "group" ||
           chatType === "supergroup";
         const admin = isAdmin(userId, env);
+        const groupAdmin = isGroup
+          ? await isTelegramGroupAdmin(env.BOT_TOKEN, chatId, userId)
+          : false;
+        const canManageGroupLedger = admin || groupAdmin;
         const originalText = String(
           message.text || ""
         ).trim();
@@ -96,31 +100,24 @@ export default {
 
         const now = new Date();
 
-        // Admin မြန်မာ Reply Keyboard ကို Private Chat မှာသာ ပြမယ်။
+        // Private Chat မှာ Bot Owner အတွက် စီမံသူ Menu ပြမယ်။
         if (admin && !isGroup) {
-          const menuHandled = await handleAdminKeyboard(
-            env,
-            chatId,
-            text
-          );
-
-          if (menuHandled) {
-            return new Response("OK");
-          }
-
+          const menuHandled = await handleAdminKeyboard(env, chatId, text);
+          if (menuHandled) return new Response("OK");
           text = mapAdminButtonToCommand(text);
         }
 
-        if (!admin || isGroup) {
-          const userMenuHandled = await handleUserKeyboard(
-            env,
-            chatId,
-            text
-          );
+        // Group Owner/Admin အတွက် အုပ်စုစီမံ Menu ပြမယ်။
+        if (isGroup && canManageGroupLedger) {
+          const groupMenuHandled = await handleGroupAdminKeyboard(env, chatId, text);
+          if (groupMenuHandled) return new Response("OK");
+          text = mapGroupAdminButtonToCommand(text);
+        }
 
-          if (userMenuHandled) {
-            return new Response("OK");
-          }
+        // သာမန် User Menu (Group Admin လည်း User လုပ်ဆောင်ချက် သုံးနိုင်သည်)
+        if (!admin || isGroup) {
+          const userMenuHandled = await handleUserKeyboard(env, chatId, text);
+          if (userMenuHandled) return new Response("OK");
 
           const userCommands = {
             "📊 စာရင်းကြည့်ရန်": "/ledger",
@@ -400,7 +397,7 @@ export default {
         }
 
         if (text === "/untouched") {
-          if (!admin) {
+          if (!canManageGroupLedger) {
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
@@ -428,7 +425,7 @@ export default {
         }
 
         if (text.startsWith("/top")) {
-          if (!admin) {
+          if (!canManageGroupLedger) {
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
@@ -518,7 +515,7 @@ export default {
         }
 
         if (text.startsWith("/below")) {
-          if (!admin) {
+          if (!canManageGroupLedger) {
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
@@ -574,7 +571,7 @@ export default {
         }
 
         if (text.startsWith("/above")) {
-          if (!admin) {
+          if (!canManageGroupLedger) {
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
@@ -630,7 +627,7 @@ export default {
         }
 
         if (text === "/sales") {
-          if (!admin) {
+          if (!canManageGroupLedger) {
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
@@ -677,7 +674,7 @@ export default {
         }
 
         if (text === "/resetledger") {
-          if (!admin) {
+          if (!canManageGroupLedger) {
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
@@ -1064,7 +1061,7 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
 `👑 မင်္ဂလာပါ စီမံသူ
 
 ━━━━━━━━━━━━━━
-✅ New Zealand 2D Ledger Bot v5.0
+✅ New Zealand 2D Ledger Bot v5.0.1
 ━━━━━━━━━━━━━━
 
 အောက်က မြန်မာခလုတ်တွေကို နှိပ်ပြီး စီမံနိုင်ပါပြီ။
@@ -1093,7 +1090,10 @@ Admin ထံ Group အသုံးပြုခွင့်တောင်းပ�
               return new Response("OK");
             }
 
-            await sendMessage(env.BOT_TOKEN, chatId, buildWelcomeMessage(), userMainKeyboard());
+            const keyboard = canManageGroupLedger
+              ? groupAdminMainKeyboard()
+              : userMainKeyboard();
+            await sendMessage(env.BOT_TOKEN, chatId, buildWelcomeMessage(), keyboard);
             return new Response("OK");
           }
 
@@ -1730,6 +1730,52 @@ async function handleUserKeyboard(env, chatId, text) {
   return false;
 }
 
+function groupAdminMainKeyboard() {
+  return {
+    keyboard: [
+      ["🎲 ၂ဒီထိုးရန်", "📊 စာရင်းကြည့်ရန်"],
+      ["🔍 ဂဏန်းရှာရန်", "📖 အသုံးပြုနည်း"],
+      ["💰 စုစုပေါင်းအရောင်း", "🏆 အများဆုံးဂဏန်း"],
+      ["📉 ၅,၀၀၀ အောက်", "📈 ၁၀,၀၀၀ အထက်"],
+      ["🎯 မထိုးရသေးသောဂဏန်း"],
+      ["♻️ စာရင်းရှင်းရန်"],
+      ["💎 အသင်းဝင်ရန်", "📞 စီမံသူဆက်သွယ်ရန်"]
+    ],
+    resize_keyboard: true,
+    is_persistent: true,
+    input_field_placeholder: "အုပ်စုစီမံလုပ်ဆောင်ချက်ကို ရွေးပါ"
+  };
+}
+
+async function handleGroupAdminKeyboard(env, chatId, text) {
+  if (text === "♻️ စာရင်းရှင်းရန်") {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "⚠️ ဒီအုပ်စုရဲ့ စာရင်းအားလုံးကို ရှင်းမှာ သေချာပါသလား။",
+      {
+        inline_keyboard: [[
+          { text: "✅ အတည်ပြုမည်", callback_data: `group_reset_confirm:${chatId}` },
+          { text: "❌ မလုပ်တော့ပါ", callback_data: "group_reset_cancel" }
+        ]]
+      }
+    );
+    return true;
+  }
+  return false;
+}
+
+function mapGroupAdminButtonToCommand(text) {
+  const commands = {
+    "💰 စုစုပေါင်းအရောင်း": "/sales",
+    "🏆 အများဆုံးဂဏန်း": "/top",
+    "📉 ၅,၀၀၀ အောက်": "/below 5000",
+    "📈 ၁၀,၀၀၀ အထက်": "/above 10000",
+    "🎯 မထိုးရသေးသောဂဏန်း": "/untouched"
+  };
+  return commands[text] || text;
+}
+
 function adminMainKeyboard() {
   return {
     keyboard: [
@@ -1885,8 +1931,30 @@ async function handleAdminCallback(env, callbackQuery) {
   const chatId = callbackQuery.message?.chat?.id;
   const data = String(callbackQuery.data || "");
 
-  if (!chatId || !isAdmin(fromId, env)) {
-    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Admin သာ အသုံးပြုနိုင်ပါတယ်။", true);
+  if (!chatId) return;
+
+  if (data === "group_reset_cancel") {
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "မလုပ်တော့ပါ။");
+    return;
+  }
+
+  if (data.startsWith("group_reset_confirm:")) {
+    const requestedChatId = Number(data.split(":")[1]);
+    const allowed = isAdmin(fromId, env) ||
+      await isTelegramGroupAdmin(env.BOT_TOKEN, chatId, fromId);
+    if (!allowed || requestedChatId !== Number(chatId)) {
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, "အုပ်စုစီမံသူသာ အသုံးပြုနိုင်ပါတယ်။", true);
+      return;
+    }
+    await resetNumberTotals(env.DB, chatId);
+    await resetTransactions(env.DB, chatId);
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "စာရင်းရှင်းပြီးပါပြီ ✅");
+    await sendMessage(env.BOT_TOKEN, chatId, "✅ ဒီအုပ်စု၏ စာရင်းကို ရှင်းပြီးပါပြီ။");
+    return;
+  }
+
+  if (!isAdmin(fromId, env)) {
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Bot စီမံသူသာ အသုံးပြုနိုင်ပါတယ်။", true);
     return;
   }
 
@@ -2035,6 +2103,20 @@ async function sendLongMessage(
         index + maxLength
       )
     );
+  }
+}
+
+async function isTelegramGroupAdmin(token, chatId, userId) {
+  try {
+    const response = await fetch(
+      `https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(chatId)}&user_id=${encodeURIComponent(userId)}`
+    );
+    const data = await response.json();
+    if (!data.ok || !data.result) return false;
+    return data.result.status === "creator" || data.result.status === "administrator";
+  } catch (error) {
+    console.error("Group admin check failed:", error);
+    return false;
   }
 }
 

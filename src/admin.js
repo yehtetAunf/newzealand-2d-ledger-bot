@@ -1,4 +1,10 @@
-import { updateLicense, getUsers } from "./database.js";
+import {
+  updateLicense,
+  getUsers,
+  approveGroup as approveGroupDb,
+  banGroup as banGroupDb,
+  unbanGroup as unbanGroupDb
+} from "./database.js";
 
 const DEFAULT_ADMIN_ID = 8840114917;
 
@@ -22,6 +28,18 @@ export async function banUser(db, chatId) {
   );
 }
 
+export async function approveGroup(db, groupId) {
+  return approveGroupDb(db, groupId);
+}
+
+export async function banGroup(db, groupId) {
+  return banGroupDb(db, groupId);
+}
+
+export async function unbanGroup(db, groupId) {
+  return unbanGroupDb(db, groupId);
+}
+
 export async function listUsers(db) {
   return getUsers(db);
 }
@@ -31,4 +49,4 @@ export function isAdmin(chatId, env) {
     Number(env.ADMIN_ID) || DEFAULT_ADMIN_ID;
 
   return Number(chatId) === adminId;
-}
+    }

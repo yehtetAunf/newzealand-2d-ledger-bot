@@ -48,7 +48,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "4.2.0"
+        version: "4.2.1"
       });
     }
 
@@ -58,6 +58,11 @@ export default {
     ) {
       try {
         const update = await request.json();
+
+        if (update.callback_query) {
+          await handleAdminCallback(env, update.callback_query);
+          return new Response("OK");
+        }
 
         if (!update.message) {
           return new Response("OK");
@@ -85,7 +90,7 @@ export default {
         // Admin မြန်မာ Reply Keyboard ကို Private Chat မှာသာ ပြမယ်။
         if (admin && !isGroup) {
           const menuHandled = await handleAdminKeyboard(
-            env.BOT_TOKEN,
+            env,
             chatId,
             text
           );
@@ -1665,19 +1670,19 @@ function adminLedgerKeyboard() {
   };
 }
 
-async function handleAdminKeyboard(token, chatId, text) {
+async function handleAdminKeyboard(env, chatId, text) {
   if (text === "👤 အသုံးပြုသူများ") {
-    await sendMessage(token, chatId, "👤 အသုံးပြုသူ စီမံခန့်ခွဲမှု", adminUserKeyboard());
+    await sendMessage(env.BOT_TOKEN, chatId, "👤 အသုံးပြုသူ စီမံခန့်ခွဲမှု", adminUserKeyboard());
     return true;
   }
 
   if (text === "👥 Group များ") {
-    await sendMessage(token, chatId, "👥 Group စီမံခန့်ခွဲမှု", adminGroupKeyboard());
+    await sendMessage(env.BOT_TOKEN, chatId, "👥 Group စီမံခန့်ခွဲမှု", adminGroupKeyboard());
     return true;
   }
 
   if (text === "📊 Ledger စီမံရန်") {
-    await sendMessage(token, chatId, "📊 Ledger လုပ်ဆောင်ချက်ရွေးပါ", adminLedgerKeyboard());
+    await sendMessage(env.BOT_TOKEN, chatId, "📊 Ledger လုပ်ဆောင်ချက်ရွေးပါ", adminLedgerKeyboard());
     return true;
   }
 
@@ -1686,14 +1691,29 @@ async function handleAdminKeyboard(token, chatId, text) {
   }
 
   if (text === "🔙 ပင်မစာမျက်နှာ") {
-    await sendMessage(token, chatId, "👑 Admin ပင်မစာမျက်နှာ", adminMainKeyboard());
+    await sendMessage(env.BOT_TOKEN, chatId, "👑 Admin ပင်မစာမျက်နှာ", adminMainKeyboard());
     return true;
   }
 
   if (text === "⌨️ ခလုတ်ဖျောက်ရန်") {
-    await sendMessage(token, chatId, "✅ ခလုတ်တွေကို ဖျောက်ထားပါပြီ။ /start နှိပ်ရင် ပြန်ပေါ်ပါမယ်။", {
+    await sendMessage(env.BOT_TOKEN, chatId, "✅ ခလုတ်တွေကို ဖျောက်ထားပါပြီ။ /start နှိပ်ရင် ပြန်ပေါ်ပါမယ်။", {
       remove_keyboard: true
     });
+    return true;
+  }
+
+  if (text === "✅ Group ခွင့်ပြုရန်") {
+    await sendGroupPicker(env, chatId, "approve");
+    return true;
+  }
+
+  if (text === "🚫 Group ပိတ်ရန်") {
+    await sendGroupPicker(env, chatId, "ban");
+    return true;
+  }
+
+  if (text === "🔓 Group ပြန်ဖွင့်ရန်") {
+    await sendGroupPicker(env, chatId, "unban");
     return true;
   }
 
@@ -1701,20 +1721,171 @@ async function handleAdminKeyboard(token, chatId, text) {
     "✅ User ခွင့်ပြုရန်": "User ID နဲ့ ရက်အရေအတွက်ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/approve USER_ID 30\n\nနောက်အဆင့်မှာ ID မရိုက်ဘဲ ရွေးနိုင်တဲ့ Button စနစ် ထည့်ပေးမယ်။",
     "🚫 User ပိတ်ရန်": "ပိတ်မယ့် User ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/ban USER_ID",
     "🔓 User ပြန်ဖွင့်ရန်": "ပြန်ဖွင့်မယ့် User ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/unban USER_ID",
-    "✅ Group ခွင့်ပြုရန်": "Group ID နဲ့ ရက်အရေအတွက်ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/approvegroup GROUP_ID 30",
-    "🚫 Group ပိတ်ရန်": "ပိတ်မယ့် Group ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/bangroup GROUP_ID",
-    "🔓 Group ပြန်ဖွင့်ရန်": "ပြန်ဖွင့်မယ့် Group ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/unbangroup GROUP_ID",
     "🔢 ဂဏန်းရှာရန်": "စစ်မယ့်ဂဏန်းကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/number 67",
     "📉 သတ်မှတ်ငွေအောက်": "ငွေပမာဏကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/below 5000",
     "📈 သတ်မှတ်ငွေအထက်": "ငွေပမာဏကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/above 10000"
   };
 
   if (prompts[text]) {
-    await sendMessage(token, chatId, prompts[text]);
+    await sendMessage(env.BOT_TOKEN, chatId, prompts[text]);
     return true;
   }
 
   return false;
+}
+
+
+async function sendGroupPicker(env, chatId, action) {
+  const groups = await listGroups(env.DB);
+
+  if (!groups.length) {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "👥 Group စာရင်း မရှိသေးပါ။ Bot ကို Group ထဲထည့်ပြီး /groupid သို့ /start ပို့ပါ။"
+    );
+    return;
+  }
+
+  const actionLabels = {
+    approve: "✅ ခွင့်ပြုမည့် Group ရွေးပါ",
+    ban: "🚫 ပိတ်မည့် Group ရွေးပါ",
+    unban: "🔓 ပြန်ဖွင့်မည့် Group ရွေးပါ"
+  };
+
+  const buttons = groups.slice(0, 80).map((group) => [{
+    text: `${group.status === "approved" ? "✅" : group.status === "banned" ? "🚫" : "⏳"} ${String(group.group_title || "အမည်မရှိ").slice(0, 28)}`,
+    callback_data: `grp:${action}:${group.group_id}`
+  }]);
+
+  await sendMessage(
+    env.BOT_TOKEN,
+    chatId,
+    actionLabels[action] || "Group ရွေးပါ",
+    { inline_keyboard: buttons }
+  );
+}
+
+async function handleAdminCallback(env, callbackQuery) {
+  const callbackId = callbackQuery.id;
+  const fromId = callbackQuery.from?.id;
+  const chatId = callbackQuery.message?.chat?.id;
+  const data = String(callbackQuery.data || "");
+
+  if (!chatId || !isAdmin(fromId, env)) {
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Admin သာ အသုံးပြုနိုင်ပါတယ်။", true);
+    return;
+  }
+
+  const parts = data.split(":");
+  if (parts[0] !== "grp") {
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId);
+    return;
+  }
+
+  const action = parts[1];
+  const groupId = Number(parts[2]);
+  const group = await getLicensedGroup(env.DB, groupId);
+
+  if (!group) {
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Group မတွေ့ပါ။", true);
+    return;
+  }
+
+  if (action === "approve") {
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "သက်တမ်းရွေးပါ");
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      `✅ ခွင့်ပြုမည့် Group\n\n👥 ${group.group_title || "အမည်မရှိ"}\n🆔 ${groupId}\n\nသက်တမ်းရွေးပါ။`,
+      {
+        inline_keyboard: [
+          [
+            { text: "30 ရက်", callback_data: `grp:days:${groupId}:30` },
+            { text: "90 ရက်", callback_data: `grp:days:${groupId}:90` }
+          ],
+          [
+            { text: "365 ရက်", callback_data: `grp:days:${groupId}:365` },
+            { text: "♾ အမြဲတမ်း", callback_data: `grp:days:${groupId}:forever` }
+          ]
+        ]
+      }
+    );
+    return;
+  }
+
+  if (action === "days") {
+    const duration = String(parts[3] || "");
+    const license = buildLicense(duration);
+    if (!license.ok) {
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, license.message, true);
+      return;
+    }
+
+    await approveGroup(env.DB, groupId, license.plan, license.expiresAt);
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "ခွင့်ပြုပြီးပါပြီ ✅");
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      `✅ Group အသုံးပြုခွင့်ပေးပြီးပါပြီ။\n\n👥 Group : ${group.group_title || "အမည်မရှိ"}\n🆔 Group ID : ${groupId}\n💎 Plan : ${license.plan}\n📅 Expire : ${license.expireText}`
+    );
+
+    try {
+      await sendMessage(
+        env.BOT_TOKEN,
+        groupId,
+        `✅ ဒီ Group ကို Bot အသုံးပြုခွင့်ပေးပြီးပါပြီ။\n\n💎 Plan : ${license.plan}\n📅 Expire : ${license.expireText}`
+      );
+    } catch (error) {
+      console.error("Group approval notification failed:", error);
+    }
+    return;
+  }
+
+  if (action === "ban") {
+    await banGroup(env.DB, groupId);
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Group ပိတ်ပြီးပါပြီ 🚫");
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      `🚫 Group ကို ပိတ်ပြီးပါပြီ။\n\n👥 Group : ${group.group_title || "အမည်မရှိ"}\n🆔 Group ID : ${groupId}`
+    );
+    return;
+  }
+
+  if (action === "unban") {
+    await unbanGroup(env.DB, groupId);
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Group ပြန်ဖွင့်ပြီးပါပြီ 🔓");
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      `🔓 Group ကို ပြန်ဖွင့်ပြီးပါပြီ။\n\n👥 Group : ${group.group_title || "အမည်မရှိ"}\n🆔 Group ID : ${groupId}`
+    );
+    return;
+  }
+
+  await answerCallbackQuery(env.BOT_TOKEN, callbackId);
+}
+
+async function answerCallbackQuery(token, callbackQueryId, text = "", showAlert = false) {
+  if (!callbackQueryId) return;
+
+  const response = await fetch(
+    `https://api.telegram.org/bot${token}/answerCallbackQuery`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        callback_query_id: callbackQueryId,
+        ...(text ? { text } : {}),
+        show_alert: showAlert
+      })
+    }
+  );
+
+  if (!response.ok) {
+    console.error("answerCallbackQuery failed:", await response.text());
+  }
 }
 
 function mapAdminButtonToCommand(text) {

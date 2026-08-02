@@ -520,3 +520,8 @@ export async function resetNumberTotals(
     )
     .run();
 }
+export async function resetTransactions(db) {
+  return db
+    .prepare(`DELETE FROM transactions`)
+    .run();
+}

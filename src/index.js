@@ -1004,7 +1004,7 @@ return new Response("OK");
             const user =
               await getUser(
                 env.DB,
-                chatId
+                userId
               );
 
             const access =
@@ -1134,7 +1134,7 @@ Ledger Commands
         if (!admin) {
           const user = await getUser(
             env.DB,
-            chatId
+            userId
           );
 
           const access =

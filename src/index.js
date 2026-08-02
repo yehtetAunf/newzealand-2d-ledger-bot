@@ -1045,23 +1045,36 @@ Ledger Commands
 
           const reportLines =
             bet.items
-              .map((item) => {
+              .map((item, index) => {
+                const number =
+                  "①②③④⑤⑥⑦⑧⑨⑩"[index] ||
+                  `${index + 1}.`;
+
+                const amountPerNumber =
+                  item.amountPerNumber ??
+                  (
+                    Number(item.count) > 0
+                      ? Number(item.totalAmount || 0) /
+                        Number(item.count)
+                      : 0
+                  );
+
                 return (
-                  `🔹 ${item.label} ` +
-                  `(${item.count} ကွက်) = ` +
-                  `${formatMoney(
-                    item.totalAmount
-                  )}`
+                  `${number} ${item.label}\n` +
+                  `   ➜ ${item.count} ကွက် × ` +
+                  `${formatMoney(amountPerNumber)} ကျပ်\n` +
+                  `   💵 = ${formatMoney(item.totalAmount)} ကျပ်`
                 );
               })
-              .join("\n");
+              .join("\n\n");
 
           const grandTotal =
             bet.grandTotal ??
             bet.totalAmount ??
             0;
 
-          const report = `╔══════════════════════╗
+          const report =
+`╔══════════════════════╗
         📝 2D စာရင်း
 ╚══════════════════════╝
 
@@ -1072,12 +1085,12 @@ Ledger Commands
 
 ══════════════════════
 
-${bet.items.map(item => `🔹 ${item.label}
-   ➜ ${item.count} ကွက် × ${formatMoney(item.amountPerNumber)} = ${formatMoney(item.totalAmount)} ကျပ်`).join("\n\n")}
+${reportLines}
 
 ══════════════════════
 
-💰 စုစုပေါင်း : ${formatMoney(grandTotal)} ကျပ်
+📊 စုစုပေါင်းကွက် : ${bet.totalCount}
+💰 စုစုပေါင်းငွေ : ${formatMoney(grandTotal)} ကျပ်
 
 ══════════════════════
 
@@ -1087,6 +1100,7 @@ ${bet.items.map(item => `🔹 ${item.label}
 ငွေပမာဏကို ပြန်လည်စစ်ဆေးပေးပါ။
 
 🙏 ကျေးဇူးတင်ပါတယ်။`;
+
           await sendLongMessage(
             env.BOT_TOKEN,
             chatId,
@@ -1133,23 +1147,16 @@ ${bet.items.map(item => `🔹 ${item.label}
           await sendMessage(
             env.BOT_TOKEN,
             chatId,
-`❌ စာရင်းပုံစံမမှန်ပါ။
+`❌ စာရင်းပုံစံ မမှန်ပါ။
 
-အသုံးပြုပုံ
+အမှား : ${error.message}
 
+💡 ဥပမာ
 67R 500
-67R 78R 90R 500
-67-78-90 R 500
 60147 အခွေ 500
-60147 အခွေပူး 500
 အပူး 500
-ပါဝါ 500
-စုံမ 500
-1/7 ထိပ် 500
-8/9 ပါတ် 500
-67/12345890 R 500
 
-အမှား : ${error.message}`
+အသုံးပြုပုံအပြည့်အစုံကြည့်ရန် /help ကိုနှိပ်ပါ။`
           );
         }
 

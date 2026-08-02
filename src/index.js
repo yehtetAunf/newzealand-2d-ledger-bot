@@ -819,6 +819,7 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
               chatId,
 `👑 မင်္ဂလာပါ Admin
 
+━━━━━━━━━━━━━━
 ✅ New Zealand 2D Ledger Bot
 
 ━━━━━━━━━━━━━━

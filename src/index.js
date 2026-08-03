@@ -1,4 +1,5 @@
 import { parseBetMessage } from "./parser.js";
+import { tryCalculateExpression } from "./calculator.js";
 
 import {
   getUser,
@@ -48,7 +49,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "5.1.0"
+        version: "5.1.1-calculator"
       });
     }
 
@@ -1235,6 +1236,50 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
 /above 10000
 /mysales`
           );
+          return new Response("OK");
+        }
+
+        /*
+         * =========================================
+         * SAFE CALCULATOR
+         * =========================================
+         */
+        try {
+          const calculation =
+            tryCalculateExpression(
+              originalText
+            );
+
+          if (calculation) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+`🧮 Calculator
+
+${calculation.expression}
+
+━━━━━━━━━━━━━━━━━━
+
+= ${calculation.formattedResult} ✅`
+            );
+
+            return new Response("OK");
+          }
+        } catch (calculatorError) {
+          await sendMessage(
+            env.BOT_TOKEN,
+            chatId,
+`❌ Calculator ပုံစံ မမှန်ပါ။
+
+${String(
+  calculatorError?.message ||
+  "တွက်ချက်မှု မအောင်မြင်ပါ။"
+)}
+
+ဥပမာ
+3000 + 5000 + 6000 - 2000 = ??`
+          );
+
           return new Response("OK");
         }
 

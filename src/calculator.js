@@ -287,3 +287,282 @@ export function calculateBetItems(
 
   return calculateGrandTotal(items);
     }
+
+
+/*
+ * =========================================
+ * SAFE CHAT CALCULATOR
+ * =========================================
+ *
+ * 2D Parser နဲ့မရောအောင် calculator စာသားကို
+ * သီးသန့်စစ်ပြီး eval() မသုံးဘဲ တွက်ချက်သည်။
+ */
+
+export function tryCalculateExpression(input) {
+  const original = String(input ?? "").trim();
+
+  if (!original) {
+    return null;
+  }
+
+  // Calculator အတွက် ခွင့်ပြုထားသော စာလုံးများသာ လက်ခံမယ်။
+  if (!/^[\d,\s+\-*/×÷()=?]+$/.test(original)) {
+    return null;
+  }
+
+  let expression = original
+    .replace(/[=?\s]+$/g, "")
+    .trim();
+
+  if (!expression) {
+    return null;
+  }
+
+  // အနည်းဆုံး သင်္ချာ Operator တစ်ခု ပါရမယ်။
+  if (!/[+\-*/×÷]/.test(expression)) {
+    return null;
+  }
+
+  // 76-09-34-52 လို 2D ဂဏန်းစာရင်းကို Calculator မယူရ။
+  const compact = expression.replace(/\s+/g, "");
+  if (/^\d{1,2}(?:-\d{1,2})+$/.test(compact)) {
+    return null;
+  }
+
+  // 67/12345 လို ကပ်ဂဏန်းပုံစံကို Calculator မယူရ။
+  if (/^\d{1,2}\/\d{3,}$/.test(compact)) {
+    return null;
+  }
+
+  expression = expression
+    .replace(/,/g, "")
+    .replace(/×/g, "*")
+    .replace(/÷/g, "/");
+
+  if (!/^[\d\s+\-*/().]+$/.test(expression)) {
+    throw new Error("Calculator ပုံစံ မမှန်ပါ။");
+  }
+
+  const tokens = tokenizeExpression(expression);
+  let position = 0;
+
+  function peek() {
+    return tokens[position] || null;
+  }
+
+  function consume(expected = null) {
+    const token = tokens[position];
+
+    if (!token || (expected !== null && token.value !== expected)) {
+      throw new Error("Calculator ပုံစံ မမှန်ပါ။");
+    }
+
+    position += 1;
+    return token;
+  }
+
+  function parseExpression() {
+    let value = parseTerm();
+
+    while (
+      peek()?.value === "+" ||
+      peek()?.value === "-"
+    ) {
+      const operator = consume().value;
+      const right = parseTerm();
+      value =
+        operator === "+"
+          ? value + right
+          : value - right;
+    }
+
+    return value;
+  }
+
+  function parseTerm() {
+    let value = parseFactor();
+
+    while (
+      peek()?.value === "*" ||
+      peek()?.value === "/"
+    ) {
+      const operator = consume().value;
+      const right = parseFactor();
+
+      if (operator === "/" && right === 0) {
+        throw new Error("0 နဲ့ စားလို့မရပါ။");
+      }
+
+      value =
+        operator === "*"
+          ? value * right
+          : value / right;
+    }
+
+    return value;
+  }
+
+  function parseFactor() {
+    const token = peek();
+
+    if (!token) {
+      throw new Error("Calculator ပုံစံ မမှန်ပါ။");
+    }
+
+    if (token.value === "+") {
+      consume("+");
+      return parseFactor();
+    }
+
+    if (token.value === "-") {
+      consume("-");
+      return -parseFactor();
+    }
+
+    if (token.value === "(") {
+      consume("(");
+      const value = parseExpression();
+      consume(")");
+      return value;
+    }
+
+    if (token.type === "number") {
+      consume();
+      return token.number;
+    }
+
+    throw new Error("Calculator ပုံစံ မမှန်ပါ။");
+  }
+
+  const result = parseExpression();
+
+  if (position !== tokens.length) {
+    throw new Error("Calculator ပုံစံ မမှန်ပါ။");
+  }
+
+  if (!Number.isFinite(result)) {
+    throw new Error("Calculator အဖြေ မမှန်ပါ။");
+  }
+
+  if (Math.abs(result) > Number.MAX_SAFE_INTEGER) {
+    throw new Error("Calculator ဂဏန်းပမာဏ အလွန်ကြီးနေပါသည်။");
+  }
+
+  return {
+    expression: formatCalculatorExpression(tokens),
+    result,
+    formattedResult: formatCalculatorNumber(result)
+  };
+}
+
+function tokenizeExpression(expression) {
+  const tokens = [];
+  let index = 0;
+
+  while (index < expression.length) {
+    const char = expression[index];
+
+    if (/\s/.test(char)) {
+      index += 1;
+      continue;
+    }
+
+    if (/\d|\./.test(char)) {
+      let numberText = "";
+
+      while (
+        index < expression.length &&
+        /[\d.]/.test(expression[index])
+      ) {
+        numberText += expression[index];
+        index += 1;
+      }
+
+      if (
+        !/^(?:\d+\.?\d*|\.\d+)$/.test(numberText)
+      ) {
+        throw new Error("Calculator ဂဏန်းပုံစံ မမှန်ပါ။");
+      }
+
+      const number = Number(numberText);
+
+      if (!Number.isFinite(number)) {
+        throw new Error("Calculator ဂဏန်းပုံစံ မမှန်ပါ။");
+      }
+
+      tokens.push({
+        type: "number",
+        value: numberText,
+        number
+      });
+
+      continue;
+    }
+
+    if ("+-*/()".includes(char)) {
+      tokens.push({
+        type: "operator",
+        value: char
+      });
+      index += 1;
+      continue;
+    }
+
+    throw new Error("Calculator ပုံစံ မမှန်ပါ။");
+  }
+
+  if (tokens.length === 0) {
+    throw new Error("Calculator ပုံစံ မမှန်ပါ။");
+  }
+
+  return tokens;
+}
+
+function formatCalculatorExpression(tokens) {
+  let output = "";
+
+  for (const token of tokens) {
+    if (token.type === "number") {
+      output += formatCalculatorNumber(token.number);
+      continue;
+    }
+
+    if (token.value === "(") {
+      output += "(";
+      continue;
+    }
+
+    if (token.value === ")") {
+      output = output.trimEnd();
+      output += ")";
+      continue;
+    }
+
+    const symbol =
+      token.value === "*"
+        ? "×"
+        : token.value === "/"
+          ? "÷"
+          : token.value;
+
+    output += ` ${symbol} `;
+  }
+
+  return output
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function formatCalculatorNumber(value) {
+  const number = Number(value);
+
+  if (!Number.isFinite(number)) {
+    return "0";
+  }
+
+  return number.toLocaleString("en-US", {
+    maximumFractionDigits: 10
+  });
+}

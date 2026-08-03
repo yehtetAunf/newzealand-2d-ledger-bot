@@ -48,7 +48,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "5.0.4"
+        version: "5.0.5"
       });
     }
 
@@ -1061,7 +1061,7 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
 `👑 မင်္ဂလာပါ စီမံသူ
 
 ━━━━━━━━━━━━━━
-✅ New Zealand 2D Ledger Bot v5.0.4
+✅ New Zealand 2D Ledger Bot v5.0.5
 ━━━━━━━━━━━━━━
 
 အောက်က မြန်မာခလုတ်တွေကို နှိပ်ပြီး စီမံနိုင်ပါပြီ။
@@ -1328,6 +1328,12 @@ ${reportLines}
             );
           }
         } catch (error) {
+          // Group ထဲက Hi/Hello နှင့် သာမန်စကားများကို Bot က မတုံ့ပြန်ပါ။
+          // 2D စာရင်းရေးရန် ကြိုးစားထားသောစာသာ Error Message ပြမည်။
+          if (isGroup && !looksLike2DBetAttempt(originalText)) {
+            return new Response("OK");
+          }
+
           const errorMessage = String(
             error?.message || ""
           );
@@ -1364,7 +1370,9 @@ R/® နှင့် ထိုးငွေ မတွေ့ပါ။
             const smartExample =
               /^\d{3,8}$/.test(cleanInput)
                 ? `${cleanInput} အခွေ 500`
-                : `${cleanInput} 500`;
+                : /\d{1,2}(?:\s*[-./,]\s*\d{1,2})+/.test(cleanInput)
+                  ? `${cleanInput}®500`
+                  : `${cleanInput} 500`;
 
             reply =
 `❌ စာရင်းပုံစံ မမှန်ပါ။
@@ -1541,6 +1549,35 @@ function normalizeCommand(text) {
       /^\/([a-zA-Z]+)@[a-zA-Z0-9_]+/,
       "/$1"
     );
+}
+
+function looksLike2DBetAttempt(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+
+  // Commands are handled elsewhere and must not be treated as casual chat.
+  if (text.startsWith("/")) return true;
+
+  // Reverse symbols, common rules, and aliases strongly indicate a bet entry.
+  if (/[®Ⓡ]/.test(text)) return true;
+  if (/(?:^|\s)[Rr](?:\s|\d|$)/.test(text)) return true;
+  if (/(အခွေ|ခွေ|အခွေပူး|ခွေပူး|ကပ်|နက္ခတ်|ပါဝါ|ဆယ်ပြည့်|ညီကို|အပူး|စုံပူး|မပူး|မမ|စုံစုံ|ဘရိတ်|ပါတ်|ထိပ်|ပိတ်)/.test(text)) {
+    return true;
+  }
+  if (/(?:^|\s)(?:apu|khwe|khwepu|br|break|sp|mp|mm|ss|[pntsb])(?:\s|\d|$)/i.test(text)) {
+    return true;
+  }
+
+  // Examples: 76-09-34-52, 67.78.90, 67/12345.
+  if (/\d{1,2}(?:\s*[-.,/]\s*\d{1,2})+/.test(text)) return true;
+
+  // A bare one- or two-digit number is likely an incomplete 2D entry.
+  if (/^\d{1,2}$/.test(text)) return true;
+
+  // Number followed by an amount-like number, with or without spaces.
+  if (/^\d{2}\s*\d{2,}$/.test(text)) return true;
+
+  return false;
 }
 
 function getPlanName(days) {

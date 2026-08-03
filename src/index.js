@@ -48,7 +48,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "5.0.5"
+        version: "5.1.0"
       });
     }
 
@@ -1061,7 +1061,7 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
 `👑 မင်္ဂလာပါ စီမံသူ
 
 ━━━━━━━━━━━━━━
-✅ New Zealand 2D Ledger Bot v5.0.5
+✅ New Zealand 2D Ledger Bot v5.1.0
 ━━━━━━━━━━━━━━
 
 အောက်က မြန်မာခလုတ်တွေကို နှိပ်ပြီး စီမံနိုင်ပါပြီ။
@@ -1278,15 +1278,15 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
           const report = `📝 2D စာရင်း
 👤 ထိုးသူ : ${displayName}
 
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━
 
 ${reportLines}
 
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━
 
 💰 စုစုပေါင်း : ${formatMoney(grandTotal)} ကျပ်
 
-━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━
 
 ⚠️ ဂဏန်း၊ ကွက်အရေအတွက်နှင့်
 ငွေပမာဏကို ပြန်လည်စစ်ဆေးပေးပါ။
@@ -1338,85 +1338,10 @@ ${reportLines}
             error?.message || ""
           );
 
-          let reply;
-
-          if (
-            errorMessage.includes(
-              "နောက်ဆုံးစာကြောင်းတွင် R/®"
-            )
-          ) {
-            reply =
-`❌ စာရင်းပုံစံ မမှန်ပါ။
-
-နောက်ဆုံးစာကြောင်းတွင်
-R/® နှင့် ထိုးငွေ မတွေ့ပါ။
-
-မှန်ကန်သောပုံစံ
-
-16.27.38.49.50
-12.23.34.45.56
-67.78.89.90.10 R50`;
-          } else if (
-            errorMessage.includes(
-              "ထိုးငွေ (Amount) မတွေ့ပါ"
-            ) ||
-            errorMessage.includes(
-              "နောက်ဆုံးတွင် ထိုးငွေထည့်ပါ"
-            )
-          ) {
-            const cleanInput =
-              originalText.trim();
-
-            const smartExample =
-              /^\d{3,8}$/.test(cleanInput)
-                ? `${cleanInput} အခွေ 500`
-                : /\d{1,2}(?:\s*[-./,]\s*\d{1,2})+/.test(cleanInput)
-                  ? `${cleanInput}®500`
-                  : `${cleanInput} 500`;
-
-            reply =
-`❌ စာရင်းပုံစံ မမှန်ပါ။
-
-ထိုးငွေ (Amount) မတွေ့ပါ။
-
-မှန်ကန်သောပုံစံ
-${smartExample}`;
-          } else if (
-            errorMessage.includes(
-              "အကွက်အမျိုးအစား"
-            )
-          ) {
-            const digits =
-              originalText.trim();
-
-            reply =
-`❌ စာရင်းပုံစံ မမှန်ပါ။
-
-အကွက်အမျိုးအစား (အခွေ/အခွေပူး) မပါပါ။
-
-မှန်ကန်သောပုံစံ
-${digits} အခွေ 500`;
-          } else {
-            const lineMatch =
-              errorMessage.match(
-                /စာကြောင်း\s+(\d+)/
-              );
-
-            const lineNumber =
-              lineMatch?.[1] || "1";
-
-            reply =
-`❌ စာရင်းပုံစံ မမှန်ပါ။
-
-📄 စာကြောင်း (${lineNumber})
-
-📝 သင်ရိုက်ထားသောစာ
-${originalText}
-
-❗ ဒီစာရင်းအမျိုးအစားကို Bot က နားမလည်ပါ။
-
-အသုံးပြုပုံကြည့်ရန် /help ကိုနှိပ်ပါ။`;
-          }
+          const reply = buildSmartBetErrorMessage(
+            originalText,
+            errorMessage
+          );
 
           await sendMessage(
             env.BOT_TOKEN,
@@ -1526,6 +1451,67 @@ Smart Ledger Bot ဖြစ်ပါသည်။
 🙏 အသုံးပြုပေးသည့်အတွက် ကျေးဇူးတင်ရှိပါသည်။`;
 }
 
+function buildSmartBetErrorMessage(input, parserMessage = "") {
+  const original = String(input || "").trim();
+  const compact = original.replace(/\s+/g, "");
+  const exampleBase = original.replace(/[Rr®Ⓡ]+$/u, "").trim();
+  const numberListPattern = /\d{1,2}(?:\s*[-./,၊_]\s*\d{1,2})+/u;
+  const rulePattern = /(?:အပူး|စုံပူး|မပူး|ပါဝါ|နက္ခတ်|နခတ်|ညီကို|ဆယ်ပြည့်|ဆယ်ပြည့်|စုံစုံ|မမ|စုံမ|မစုံ|အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ|ဘရိတ်|ပါတ်|ပတ်|ထိပ်|ပိတ်|ကပ်|apu|sp|mp|pw|nt|mm|ss|sm|ms|khwepu|khwe|kp|kw|br|break|pat|ht|pt|cp)/iu;
+
+  if (/^[Rr®Ⓡ]\s*[\d,]+$/u.test(original)) {
+    return `❌ စာရင်းပုံစံ မှားနေပါတယ်။\n\n🔢 2D ဂဏန်း မတွေ့ပါ။\n\nမှန်ကန်သောပုံစံ\n78-90-67-35-42®500`;
+  }
+
+  if (/[Rr®Ⓡ]\s*[A-Za-z]+$/u.test(original)) {
+    return `❌ စာရင်းပုံစံ မှားနေပါတယ်။\n\n💰 ထိုးငွေကို ဂဏန်းဖြင့် ရေးပေးပါ။\n\nမှန်ကန်သောပုံစံ\n${exampleBase || "78-90-67-35-42"}®500`;
+  }
+
+  if (/[Rr®Ⓡ]\s*$/u.test(original)) {
+    return `❌ စာရင်းပုံစံ မှားနေပါတယ်။\n\n💰 ထိုးငွေ (Amount) မထည့်ရသေးပါ။\n\nမှန်ကန်သောပုံစံ\n${exampleBase || "78-90-67-35-42"}®500`;
+  }
+
+  if (
+    parserMessage.includes("ထိုးငွေ (Amount) မမှန်") ||
+    /[Rr®Ⓡ]\s*[^\d\s,]+/u.test(original)
+  ) {
+    return `❌ စာရင်းပုံစံ မှားနေပါတယ်။\n\n💰 ထိုးငွေ (Amount) မှားနေပါတယ်။\nထိုးငွေကို ဂဏန်းဖြင့် ရေးပေးပါ။\n\nမှန်ကန်သောပုံစံ\n78-90-67-35-42®500`;
+  }
+
+  if (
+    parserMessage.includes("ထိုးငွေ (Amount) မတွေ့") ||
+    parserMessage.includes("နောက်ဆုံးတွင် ထိုးငွေထည့်ပါ") ||
+    numberListPattern.test(original) ||
+    rulePattern.test(original)
+  ) {
+    let example;
+    if (/^\d{3,8}$/u.test(compact)) {
+      example = `${original} အခွေ 500`;
+    } else if (numberListPattern.test(original)) {
+      example = `${original}®500`;
+    } else {
+      example = `${original} 500`;
+    }
+
+    return `❌ စာရင်းပုံစံ မှားနေပါတယ်။\n\n💰 ထိုးငွေ (Amount) မထည့်ရသေးပါ။\n\nမှန်ကန်သောပုံစံ\n${example}`;
+  }
+
+  if (parserMessage.includes("အကွက်အမျိုးအစား")) {
+    return `❌ စာရင်းပုံစံ မှားနေပါတယ်။\n\n🔢 အကွက်အမျိုးအစား (အခွေ/အခွေပူး) မပါပါ။\n\nမှန်ကန်သောပုံစံ\n${original} အခွေ 500`;
+  }
+
+  if (
+    parserMessage.includes("ဂဏန်း သို့မဟုတ် Rule မတွေ့") ||
+    parserMessage.includes("တွက်ရန် 2D ဂဏန်းမရှိ")
+  ) {
+    return `❌ စာရင်းပုံစံ မှားနေပါတယ်။\n\n🔢 2D ဂဏန်း မတွေ့ပါ။\n\nမှန်ကန်သောပုံစံ\n78-90-67-35-42®500`;
+  }
+
+  const lineMatch = parserMessage.match(/စာကြောင်း\s+(\d+)/u);
+  const lineNumber = lineMatch?.[1] || "1";
+
+  return `❌ စာရင်းပုံစံ မှားနေပါတယ်။\n\n📄 စာကြောင်း (${lineNumber})\n\n📝 သင်ရိုက်ထားသောစာ\n${original}\n\n❗ ဂဏန်း၊ Rule သို့မဟုတ် ထိုးငွေပုံစံကို ပြန်စစ်ပါ။\n\nအသုံးပြုပုံကြည့်ရန် /help ကိုနှိပ်ပါ။`;
+}
+
 function getAdminId(env) {
   const configuredId =
     Number(env.ADMIN_ID);
@@ -1564,7 +1550,7 @@ function looksLike2DBetAttempt(value) {
   if (/(အခွေ|ခွေ|အခွေပူး|ခွေပူး|ကပ်|နက္ခတ်|ပါဝါ|ဆယ်ပြည့်|ညီကို|အပူး|စုံပူး|မပူး|မမ|စုံစုံ|ဘရိတ်|ပါတ်|ထိပ်|ပိတ်)/.test(text)) {
     return true;
   }
-  if (/(?:^|\s)(?:apu|khwe|khwepu|br|break|sp|mp|mm|ss|[pntsb])(?:\s|\d|$)/i.test(text)) {
+  if (/(?:^|\s)(?:apu|khwe|khwepu|kp|kw|br|break|sp|mp|mm|ss|sm|ms|pw|nt|cp|ht|pt|pat|[pntsb])(?:\s|\d|$)/i.test(text)) {
     return true;
   }
 

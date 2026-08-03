@@ -226,14 +226,18 @@ function parseBreakRule(expression, amount, label) {
 
 function parseKhwayRule(expression, amount, label) {
   const match = expression.match(
-    /^(\d{3,8})\s*(အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ)\s*(?:ပါ)?$/i
+    /^(\d{3,8})\s*(အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ|khwepu|khwe|kp|kw)\s*(?:ပါ)?$/iu
   );
 
   if (!match) return null;
 
   const keyword = match[2];
+  const normalizedKeyword = String(keyword).toLowerCase();
   const includeDoubles =
-    /ပူး$/u.test(keyword) || keyword === "ခပ";
+    /ပူး$/u.test(keyword) ||
+    keyword === "ခပ" ||
+    normalizedKeyword === "khwepu" ||
+    normalizedKeyword === "kp";
 
   const result = expandKhway(
     match[1],
@@ -255,7 +259,7 @@ function parseKhwayRule(expression, amount, label) {
 
 function parseDigitRule(expression, amount, label) {
   const match = expression.match(
-    /^([0-9/.,၊_-]+)\s*(ပါတ်|ပတ်|ထိပ်|ပိတ်)$/u
+    /^([0-9/.,၊_-]+)\s*(ပါတ်|ပတ်|ထိပ်|ပိတ်|pat|ht|pt)$/iu
   );
 
   if (!match) return null;
@@ -299,7 +303,7 @@ function parseGapRule(expression, amount, label) {
   }
 
   const match = source.match(
-    /^(\d{1,9})\s*([./_-])\s*(\d{1,9})\s*(ကပ်)?$/u
+    /^(\d{1,9})\s*([./_-])\s*(\d{1,9})\s*(ကပ်|cp)?$/iu
   );
 
   if (!match) return null;
@@ -550,21 +554,21 @@ function isRecognizedAttachedExpression(
   }
 
   if (
-    /^\d{3,8}(အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ)(?:ပါ)?$/iu
+    /^\d{3,8}(အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ|khwepu|khwe|kp|kw)(?:ပါ)?$/iu
       .test(compact)
   ) {
     return true;
   }
 
   if (
-    /^[0-9/.,၊_-]+(ပါတ်|ပတ်|ထိပ်|ပိတ်)$/u
+    /^[0-9/.,၊_-]+(ပါတ်|ပတ်|ထိပ်|ပိတ်|pat|ht|pt)$/iu
       .test(compact)
   ) {
     return true;
   }
 
   if (
-    /^\d{1,9}[./_-]\d{1,9}ကပ်$/u
+    /^\d{1,9}[./_-]\d{1,9}(?:ကပ်|cp)$/iu
       .test(compact)
   ) {
     return true;

@@ -560,11 +560,13 @@ export function normalizeFixedRuleName(
 
     "ပါဝါ": "ပါဝါ",
     "p": "ပါဝါ",
+    "pw": "ပါဝါ",
     "power": "ပါဝါ",
 
     "နက္ခတ်": "နက္ခတ်",
     "နခတ်": "နက္ခတ်",
     "n": "နက္ခတ်",
+    "nt": "နက္ခတ်",
     "nakhat": "နက္ခတ်",
 
     "ညီကို": "ညီကို",
@@ -677,20 +679,22 @@ export function normalizeDigitRuleName(
     ruleName ?? ""
   )
     .trim()
-    .replace(/\s+/g, "");
+    .replace(/\s+/g, "")
+    .toLowerCase();
 
   if (
     value === "ပါတ်" ||
-    value === "ပတ်"
+    value === "ပတ်" ||
+    value === "pat"
   ) {
     return "ပါတ်";
   }
 
-  if (value === "ထိပ်") {
+  if (value === "ထိပ်" || value === "ht") {
     return "ထိပ်";
   }
 
-  if (value === "ပိတ်") {
+  if (value === "ပိတ်" || value === "pt") {
     return "ပိတ်";
   }
 

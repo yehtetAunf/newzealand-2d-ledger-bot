@@ -2373,13 +2373,11 @@ ${rows.map((row) => `${row.number} = ${formatMoney(row.total_amount)}`).join("\n
     return;
   }
 
-  await sendPrivateNotice(
-    env,
-    userId,
-    groupId,
-    `👥 Group ID : ${groupId}
-${msg}`
-  );
+  await sendLongMessage(
+  env.BOT_TOKEN,
+  groupId,
+  msg
+);
 }
 
 async function sendLongMessage(

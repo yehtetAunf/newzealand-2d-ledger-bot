@@ -56,7 +56,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "5.1.3"
+        version: "5.1.4"
       });
     }
 
@@ -1294,7 +1294,7 @@ ${reportLines}
         } catch (error) {
           // Group ထဲက Hi/Hello နှင့် သာမန်စကားများကို Bot က မတုံ့ပြန်ပါ။
           // 2D စာရင်းရေးရန် ကြိုးစားထားသောစာသာ Error Message ပြမည်။
-          if (isGroup && !looksLike2DBetAttempt(originalText)) {
+          if (!looksLike2DBetAttempt(originalText)) {
             return new Response("OK");
           }
 

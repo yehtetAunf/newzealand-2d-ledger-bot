@@ -749,9 +749,72 @@ function buildGapNumbers(
 }
 
 function normalizeMessage(text) {
-  return String(text || "")
+  let value = String(text || "")
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
-    .replace(/\u00a0/g, " ")
+    .replace(/[\u00a0\u2007\u202f]/g, " ")
+    .replace(/[Ⓡ®]/g, "R")
+    .replace(/\bR\b/gi, "R")
     .trim();
+
+  // “9 DU”, “9Du”, “9du” စသည့် ခေါင်းစဉ်စာသားကိုသာ ဖယ်ရှားသည်။
+  // ဒီ token ကြောင့် စာရင်းတစ်ခုလုံး reject မဖြစ်စေရန် ဖြစ်သည်။
+  value = value.replace(/(?:^|\s)\d+\s*du(?=\s|$)/giu, " ");
+
+  // “24.97 ဒဲ့ 600 R 300” နှင့် “24.97=600R300” ကို
+  // တည့် 600 + ပြန် 300 ဟူသော record နှစ်ခုအဖြစ် ပြောင်းသည်။
+  value = value.replace(
+    /(^|\n|\s)(\d{2}(?:\s*[.,/၊_-]\s*\d{2})+)\s*(?:ဒဲ့|=)\s*([\d,]+)\s*R\s*([\d,]+)/giu,
+    (_, lead, expression, directAmount, reverseAmount) =>
+      `${lead}${expression} ${directAmount}\n${expression}R ${reverseAmount}`
+  );
+
+  // R5037 => R50 + next record 37, R500503492 => R500 + next 503492.
+  // Amount ကို 10 ဖြင့်စားပြတ်သည့် အတိုဆုံး prefix အဖြစ် ခွဲယူသည်။
+  value = value.replace(/R\s*(\d{3,})(?=\s|$|[^0-9])/giu, (whole, digits) => {
+    const split = splitAmountAndFollowingDigits(digits);
+    return split ? `R${split.amount}\n${split.tail}` : whole;
+  });
+
+  // ခွေ10081 => ခွေ100 + next record 81 စသည့် ဆက်ရေးပုံများ။
+  value = value.replace(
+    /(ခွေပူး|အခွေပူး|ခွေ|အခွေ)\s*(\d{3,})(?=\s|$|[^0-9])/giu,
+    (whole, keyword, digits) => {
+      const split = splitAmountAndFollowingDigits(digits);
+      return split ? `${keyword}${split.amount}\n${split.tail}` : whole;
+    }
+  );
+
+  // Record တစ်ခု၏ amount ပြီးနောက် နောက် 2D record ကို space ဖြင့်သာ ဆက်ရေးထားခြင်း။
+  value = value.replace(
+    /(R\s*[\d,]+|(?:ခွေပူး|အခွေပူး|ခွေ|အခွေ)\s*[\d,]+)\s+(?=\d{2}(?:\s*[.,/၊_-]|\s*R|\s+r))/giu,
+    "$1\n"
+  );
+
+  return value
+    .replace(/[ \t]+/g, " ")
+    .replace(/ *\n */g, "\n")
+    .replace(/\n{2,}/g, "\n")
+    .trim();
+}
+
+function splitAmountAndFollowingDigits(digitsValue) {
+  const digits = String(digitsValue || "").replace(/,/g, "");
+
+  // Tail သည် 2D အစုဖြစ်ရမည်။ Amount သည် 10 ဖြင့် စားပြတ်ရမည်။
+  for (let index = 2; index <= digits.length - 2; index++) {
+    const amount = digits.slice(0, index);
+    const tail = digits.slice(index);
+
+    if (
+      Number(amount) > 0 &&
+      Number(amount) % 10 === 0 &&
+      tail.length >= 2 &&
+      tail.length % 2 === 0
+    ) {
+      return { amount, tail };
+    }
+  }
+
+  return null;
 }

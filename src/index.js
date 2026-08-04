@@ -1901,19 +1901,7 @@ async function handleAdminKeyboard(env, chatId, text) {
   }
 
   if (text === "🔐 Report ခွင့်") {
-    await sendMessage(env.BOT_TOKEN, chatId,
-`🔐 Report ခွင့်ပေး/ပိတ်ရန်
-
-✅ ခွင့်ပေးရန်
-/reportgrant GROUP_ID USER_ID all
-
-🚫 ပြန်ပိတ်ရန်
-/reportrevoke GROUP_ID USER_ID all
-
-🔎 အခြေအနေစစ်ရန်
-/reportpermissions GROUP_ID USER_ID
-
-Report တစ်ခုချင်း: top, below, above, untouched`);
+    await sendReportPermissionGroupPicker(env, chatId);
     return true;
   }
 
@@ -2005,6 +1993,108 @@ async function sendGroupPicker(env, chatId, action) {
   await sendMessage(env.BOT_TOKEN, chatId, titles[action] || "အုပ်စုကို ရွေးပါ", { inline_keyboard: buttons });
 }
 
+async function sendReportPermissionGroupPicker(env, chatId) {
+  const groups = (await listGroups(env.DB)).filter((group) => group.status !== "archived");
+
+  if (!groups.length) {
+    await sendMessage(env.BOT_TOKEN, chatId, "👥 Report ခွင့်စီမံရန် Group မရှိသေးပါ။");
+    return;
+  }
+
+  const buttons = groups.slice(0, 80).map((group) => [{
+    text: `👥 ${String(group.group_title || "အမည်မရှိ").slice(0, 30)}`,
+    callback_data: `rpm:g:${group.group_id}`
+  }]);
+
+  await sendMessage(
+    env.BOT_TOKEN,
+    chatId,
+    "🔐 Report ခွင့်စီမံရန်\n\nပထမဦးစွာ Group ကို ရွေးပါ။",
+    { inline_keyboard: buttons }
+  );
+}
+
+async function sendReportPermissionUserPicker(env, chatId, groupId) {
+  const users = await listUsers(env.DB);
+
+  if (!users.length) {
+    await sendMessage(env.BOT_TOKEN, chatId, "👤 ရွေးချယ်နိုင်သော User မရှိသေးပါ။ User က Bot Private Chat မှာ /start နှိပ်ထားရပါမယ်။");
+    return;
+  }
+
+  const buttons = users.slice(0, 80).map((user) => {
+    const name = [user.first_name, user.username ? `@${user.username}` : ""]
+      .filter(Boolean)
+      .join(" ") || `User ${user.chat_id}`;
+    return [{
+      text: `👤 ${String(name).slice(0, 30)}`,
+      callback_data: `rpm:u:${groupId}:${user.chat_id}`
+    }];
+  });
+
+  await sendMessage(
+    env.BOT_TOKEN,
+    chatId,
+    `🔐 Report ခွင့်စီမံရန်\n\n👥 Group ID : ${groupId}\n\nUser ကို ရွေးပါ။`,
+    { inline_keyboard: buttons }
+  );
+}
+
+async function sendReportPermissionActionPicker(env, chatId, groupId, targetUserId) {
+  await sendMessage(
+    env.BOT_TOKEN,
+    chatId,
+    `🔐 Report ခွင့်စီမံရန်\n\n👥 Group ID : ${groupId}\n👤 User ID : ${targetUserId}\n\nလုပ်ဆောင်ချက်ကို ရွေးပါ။`,
+    {
+      inline_keyboard: [
+        [
+          { text: "✅ ခွင့်ပေးရန်", callback_data: `rpm:a:${groupId}:${targetUserId}:grant` },
+          { text: "🚫 ပြန်ပိတ်ရန်", callback_data: `rpm:a:${groupId}:${targetUserId}:revoke` }
+        ],
+        [
+          { text: "🔎 အခြေအနေစစ်ရန်", callback_data: `rpm:a:${groupId}:${targetUserId}:check` }
+        ]
+      ]
+    }
+  );
+}
+
+async function sendReportTypePicker(env, chatId, groupId, targetUserId, action) {
+  const verb = action === "grant" ? "ခွင့်ပေးမည့်" : "ပိတ်မည့်";
+  await sendMessage(
+    env.BOT_TOKEN,
+    chatId,
+    `📊 ${verb} Report အမျိုးအစားကို ရွေးပါ။`,
+    {
+      inline_keyboard: [
+        [{ text: "✅ အားလုံး", callback_data: `rpm:t:${groupId}:${targetUserId}:${action}:all` }],
+        [
+          { text: "🏆 အများဆုံး", callback_data: `rpm:t:${groupId}:${targetUserId}:${action}:top` },
+          { text: "📉 ၅,၀၀၀ အောက်", callback_data: `rpm:t:${groupId}:${targetUserId}:${action}:below` }
+        ],
+        [
+          { text: "📈 ၁၀,၀၀၀ အထက်", callback_data: `rpm:t:${groupId}:${targetUserId}:${action}:above` },
+          { text: "🎯 မထိုးရသေး", callback_data: `rpm:t:${groupId}:${targetUserId}:${action}:untouched` }
+        ]
+      ]
+    }
+  );
+}
+
+async function sendReportPermissionStatus(env, chatId, groupId, targetUserId) {
+  const row = await getReportPermissions(env.DB, groupId, targetUserId);
+  await sendMessage(env.BOT_TOKEN, chatId,
+`🔐 Report ခွင့်အခြေအနေ
+
+👥 Group ID : ${groupId}
+👤 User ID : ${targetUserId}
+━━━━━━━━━━━━━━━━━━
+🏆 အများဆုံး : ${Number(row?.can_top) === 1 ? "✅" : "❌"}
+📉 ၅,၀၀၀ အောက် : ${Number(row?.can_below) === 1 ? "✅" : "❌"}
+📈 ၁၀,၀၀၀ အထက် : ${Number(row?.can_above) === 1 ? "✅" : "❌"}
+🎯 မထိုးရသေး : ${Number(row?.can_untouched) === 1 ? "✅" : "❌"}`);
+}
+
 function isOwner(userId, env) {
   const configuredOwnerId = Number(env.OWNER_ID);
   if (Number.isSafeInteger(configuredOwnerId) && configuredOwnerId > 0) {
@@ -2020,6 +2110,80 @@ async function handleAdminCallback(env, callbackQuery) {
   const data = String(callbackQuery.data || "");
 
   if (!chatId) return;
+
+  if (data.startsWith("rpm:")) {
+    if (!isOwner(fromId, env)) {
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Bot Owner သာ Report ခွင့်ကို စီမံနိုင်ပါတယ်။", true);
+      return;
+    }
+
+    const parts = data.split(":");
+    const step = parts[1];
+    const groupId = Number(parts[2]);
+
+    if (!Number.isSafeInteger(groupId) || groupId >= 0) {
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Group ID မမှန်ပါ။", true);
+      return;
+    }
+
+    if (step === "g") {
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, "User ရွေးပါ");
+      await sendReportPermissionUserPicker(env, chatId, groupId);
+      return;
+    }
+
+    const targetUserId = Number(parts[3]);
+    if (!Number.isSafeInteger(targetUserId) || targetUserId <= 0) {
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, "User ID မမှန်ပါ။", true);
+      return;
+    }
+
+    if (step === "u") {
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, "လုပ်ဆောင်ချက်ရွေးပါ");
+      await sendReportPermissionActionPicker(env, chatId, groupId, targetUserId);
+      return;
+    }
+
+    if (step === "a") {
+      const action = parts[4];
+      if (action === "check") {
+        await answerCallbackQuery(env.BOT_TOKEN, callbackId, "စစ်ဆေးပြီးပါပြီ");
+        await sendReportPermissionStatus(env, chatId, groupId, targetUserId);
+        return;
+      }
+      if (action !== "grant" && action !== "revoke") {
+        await answerCallbackQuery(env.BOT_TOKEN, callbackId, "လုပ်ဆောင်ချက် မမှန်ပါ။", true);
+        return;
+      }
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Report အမျိုးအစားရွေးပါ");
+      await sendReportTypePicker(env, chatId, groupId, targetUserId, action);
+      return;
+    }
+
+    if (step === "t") {
+      const action = parts[4];
+      const reportType = parts[5];
+      const allowedTypes = ["all", "top", "below", "above", "untouched"];
+      if ((action !== "grant" && action !== "revoke") || !allowedTypes.includes(reportType)) {
+        await answerCallbackQuery(env.BOT_TOKEN, callbackId, "ရွေးချယ်မှု မမှန်ပါ။", true);
+        return;
+      }
+
+      const allowed = action === "grant";
+      await setReportPermission(env.DB, groupId, targetUserId, reportType, allowed);
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, allowed ? "ခွင့်ပေးပြီးပါပြီ ✅" : "ခွင့်ပိတ်ပြီးပါပြီ 🚫");
+      await sendMessage(env.BOT_TOKEN, chatId,
+`${allowed ? "✅ Report ခွင့်ပေးပြီးပါပြီ" : "🚫 Report ခွင့်ပိတ်ပြီးပါပြီ"}
+
+👥 Group ID : ${groupId}
+👤 User ID : ${targetUserId}
+📊 Report : ${reportType}`);
+      return;
+    }
+
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId);
+    return;
+  }
 
   if (data === "group_reset_cancel") {
     await answerCallbackQuery(env.BOT_TOKEN, callbackId, "မလုပ်တော့ပါ။");

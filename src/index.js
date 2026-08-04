@@ -1181,9 +1181,9 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
               env.BOT_TOKEN,
               chatId,
 `🧮 Calculator
-━━━━━━━━━━━━━━━━━━
+
 ${calculation.expression}
-━━━━━━━━━━━━━━━━━━
+
 = ${calculation.formattedResult} ✅`
             );
 

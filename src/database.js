@@ -81,7 +81,7 @@ export async function banGroup(db, groupId) {
   await ensureLicensedGroups(db);
   return db.prepare(`
     UPDATE licensed_groups
-    SET status = 'banned', updated_at = ?
+    SET status = 'approved', updated_at = ?
     WHERE group_id = ?
   `).bind(new Date().toISOString(), groupId).run();
 }
@@ -109,15 +109,17 @@ export async function restoreGroup(db, groupId) {
   await ensureLicensedGroups(db);
   return db.prepare(`
     UPDATE licensed_groups
-    SET status = 'banned', updated_at = ?
+    SET status = 'approved', updated_at = ?
     WHERE group_id = ?
   `).bind(new Date().toISOString(), groupId).run();
 }
 
 export async function deleteGroupPermanently(db, groupId) {
   await ensureLicensedGroups(db);
+  await ensureReportPermissions(db);
   await db.prepare(`DELETE FROM ledger_totals WHERE scope_id = ?`).bind(groupId).run();
   await db.prepare(`DELETE FROM transactions WHERE chat_id = ?`).bind(groupId).run();
+  await db.prepare(`DELETE FROM report_permissions WHERE group_id = ?`).bind(groupId).run();
   return db.prepare(`DELETE FROM licensed_groups WHERE group_id = ?`).bind(groupId).run();
 }
 
@@ -127,6 +129,87 @@ export async function getLicensedGroups(db) {
     SELECT * FROM licensed_groups ORDER BY created_at DESC
   `).all();
   return results;
+}
+
+
+/* REPORT PERMISSIONS */
+export async function ensureReportPermissions(db) {
+  return db.prepare(`
+    CREATE TABLE IF NOT EXISTS report_permissions (
+      group_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      can_top INTEGER NOT NULL DEFAULT 0,
+      can_below INTEGER NOT NULL DEFAULT 0,
+      can_above INTEGER NOT NULL DEFAULT 0,
+      can_untouched INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT,
+      PRIMARY KEY (group_id, user_id)
+    )
+  `).run();
+}
+
+export async function getReportPermissions(db, groupId, userId) {
+  await ensureReportPermissions(db);
+  return db.prepare(`
+    SELECT group_id, user_id, can_top, can_below, can_above, can_untouched, updated_at
+    FROM report_permissions
+    WHERE group_id = ? AND user_id = ?
+  `).bind(Number(groupId), Number(userId)).first();
+}
+
+export async function setReportPermission(db, groupId, userId, reportType, allowed) {
+  await ensureReportPermissions(db);
+  const columns = {
+    top: 'can_top',
+    below: 'can_below',
+    above: 'can_above',
+    untouched: 'can_untouched'
+  };
+  const now = new Date().toISOString();
+  await db.prepare(`
+    INSERT OR IGNORE INTO report_permissions
+      (group_id, user_id, can_top, can_below, can_above, can_untouched, updated_at)
+    VALUES (?, ?, 0, 0, 0, 0, ?)
+  `).bind(Number(groupId), Number(userId), now).run();
+
+  if (reportType === 'all') {
+    return db.prepare(`
+      UPDATE report_permissions
+      SET can_top = ?, can_below = ?, can_above = ?, can_untouched = ?, updated_at = ?
+      WHERE group_id = ? AND user_id = ?
+    `).bind(allowed ? 1 : 0, allowed ? 1 : 0, allowed ? 1 : 0, allowed ? 1 : 0, now, Number(groupId), Number(userId)).run();
+  }
+
+  const column = columns[reportType];
+  if (!column) throw new Error('Report permission အမျိုးအစား မမှန်ပါ။');
+  return db.prepare(`
+    UPDATE report_permissions
+    SET ${column} = ?, updated_at = ?
+    WHERE group_id = ? AND user_id = ?
+  `).bind(allowed ? 1 : 0, now, Number(groupId), Number(userId)).run();
+}
+
+export async function hasReportPermission(db, groupId, userId, reportType) {
+  const row = await getReportPermissions(db, groupId, userId);
+  if (!row) return false;
+  const columns = {
+    top: 'can_top',
+    below: 'can_below',
+    above: 'can_above',
+    untouched: 'can_untouched'
+  };
+  const column = columns[reportType];
+  return Boolean(column && Number(row[column]) === 1);
+}
+
+export async function hasAnyReportPermission(db, groupId, userId) {
+  const row = await getReportPermissions(db, groupId, userId);
+  return Boolean(row && (
+    Number(row.can_top) === 1 ||
+    Number(row.can_below) === 1 ||
+    Number(row.can_above) === 1 ||
+    Number(row.can_untouched) === 1
+  ));
 }
 
 /* SCOPED NUMBER LEDGER */

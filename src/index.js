@@ -17,7 +17,11 @@ import {
   getUserSales,
   resetNumberTotals,
   resetTransactions,
-  saveTransaction
+  saveTransaction,
+  getReportPermissions,
+  setReportPermission,
+  hasReportPermission,
+  hasAnyReportPermission
 } from "./database.js";
 
 import { hasAccess } from "./license.js";
@@ -52,7 +56,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "5.1.2"
+        version: "5.1.3"
       });
     }
 
@@ -113,19 +117,20 @@ export default {
 
         // Group Owner/Admin အတွက် အုပ်စုစီမံ Menu ပြမယ်။
         if (isGroup && canManageGroupLedger) {
-          const groupMenuHandled = await handleGroupAdminKeyboard(env, chatId, text);
+          const groupMenuHandled = await handleGroupAdminKeyboard(env, chatId, userId, text);
           if (groupMenuHandled) return new Response("OK");
           text = mapGroupAdminButtonToCommand(text);
         }
 
         // သာမန် User Menu (Group Admin လည်း User လုပ်ဆောင်ချက် သုံးနိုင်သည်)
         if (!admin || isGroup) {
-          const userMenuHandled = await handleUserKeyboard(env, chatId, text);
+          const userMenuHandled = await handleUserKeyboard(env, chatId, userId, isGroup, text);
           if (userMenuHandled) return new Response("OK");
 
           const userCommands = {
             "📊 စာရင်းကြည့်ရန်": "/ledger",
-            "📖 အသုံးပြုနည်း": "/help"
+            "📖 အသုံးပြုနည်း": "/help",
+            "📊 Report Menu": "/reportmenu"
           };
           text = userCommands[text] || text;
         }
@@ -144,7 +149,8 @@ export default {
           text === "/groupid" ||
           text === "/users" ||
           text === "/groups" ||
-          /^\/(?:approve|ban|unban|approvegroup|bangroup|unbangroup)(?:\s|$)/.test(text);
+          /^\/(?:approve|ban|unban|approvegroup|bangroup|unbangroup|reportgrant|reportrevoke|reportpermissions)(?:\s|$)/.test(text) ||
+          text === "/reportmenu";
 
         if (!admin && !bypassAccessCheck) {
           const licenseRecord = isGroup
@@ -367,6 +373,72 @@ export default {
 
         /*
          * =========================================
+         * REPORT PERMISSION COMMANDS (OWNER ONLY)
+         * =========================================
+         */
+        if (/^\/report(?:grant|revoke|permissions)(?:\s|$)/.test(text)) {
+          if (!isOwner(userId, env)) {
+            await sendMessage(env.BOT_TOKEN, chatId, "⛔ Bot Owner သာ Report ခွင့်ကို ပြင်နိုင်ပါသည်။");
+            return new Response("OK");
+          }
+
+          const args = text.split(/\s+/);
+          const command = args[0];
+          const groupId = Number(args[1]);
+          const targetUserId = Number(args[2]);
+          const reportType = String(args[3] || "all").toLowerCase();
+          const allowedTypes = ["all", "top", "below", "above", "untouched"];
+
+          if (!Number.isSafeInteger(groupId) || groupId >= 0 ||
+              !Number.isSafeInteger(targetUserId) || targetUserId <= 0 ||
+              !allowedTypes.includes(reportType)) {
+            await sendMessage(env.BOT_TOKEN, chatId,
+`အသုံးပြုပုံ
+/reportgrant GROUP_ID USER_ID all
+/reportrevoke GROUP_ID USER_ID all
+/reportpermissions GROUP_ID USER_ID
+
+Report အမျိုးအစား: all, top, below, above, untouched`);
+            return new Response("OK");
+          }
+
+          if (command === "/reportpermissions") {
+            const row = await getReportPermissions(env.DB, groupId, targetUserId);
+            await sendMessage(env.BOT_TOKEN, chatId,
+`🔐 Report ခွင့်အခြေအနေ
+
+👥 Group ID : ${groupId}
+👤 User ID : ${targetUserId}
+━━━━━━━━━━━━━━━━━━
+🏆 အများဆုံး : ${Number(row?.can_top) === 1 ? "✅" : "❌"}
+📉 ၅,၀၀၀ အောက် : ${Number(row?.can_below) === 1 ? "✅" : "❌"}
+📈 ၁၀,၀၀၀ အထက် : ${Number(row?.can_above) === 1 ? "✅" : "❌"}
+🎯 မထိုးရသေး : ${Number(row?.can_untouched) === 1 ? "✅" : "❌"}`);
+            return new Response("OK");
+          }
+
+          const allowed = command === "/reportgrant";
+          await setReportPermission(env.DB, groupId, targetUserId, reportType, allowed);
+          await sendMessage(env.BOT_TOKEN, chatId,
+`${allowed ? "✅ Report ခွင့်ပေးပြီးပါပြီ" : "🚫 Report ခွင့်ပိတ်ပြီးပါပြီ"}
+
+👥 Group ID : ${groupId}
+👤 User ID : ${targetUserId}
+📊 Report : ${reportType}`);
+          return new Response("OK");
+        }
+
+        if (text === "/reportmenu") {
+          if (!isGroup) {
+            await sendMessage(env.BOT_TOKEN, chatId, "❌ /reportmenu ကို Report ကြည့်လိုသော Group ထဲမှာ အသုံးပြုပါ။");
+            return new Response("OK");
+          }
+          await sendPrivateReportMenu(env, chatId, userId);
+          return new Response("OK");
+        }
+
+        /*
+         * =========================================
          * LEDGER COMMANDS
          * =========================================
          */
@@ -401,87 +473,22 @@ export default {
         }
 
         if (text === "/untouched") {
-          if (!canManageGroupLedger) {
-            await sendMessage(
-              env.BOT_TOKEN,
-              chatId,
-              "⛔ ဒီအချက်အလက်ကို စီမံသူတစ်ယောက်တည်းသာ ကြည့်နိုင်ပါသည်။"
-            );
-            return new Response("OK");
-          }
-          const rows =
-            await getUntouchedNumbers(env.DB, chatId);
-
-          const msg = rows.length
-            ? "⭕ မထိုးရသေးသောဂဏန်းများ\n\n" +
-              rows
-                .map((row) => row.number)
-                .join(" ")
-            : "✅ 00 မှ 99 အထိ ဂဏန်းအားလုံး ထိုးပြီးပါပြီ။";
-
-          await sendLongMessage(
-            env.BOT_TOKEN,
-            chatId,
-            msg
-          );
-
+          await handlePrivateGroupReport(env, {
+            groupId: chatId, userId, isGroup, type: "untouched"
+          });
           return new Response("OK");
         }
 
         if (text.startsWith("/top")) {
-          if (!canManageGroupLedger) {
-            await sendMessage(
-              env.BOT_TOKEN,
-              chatId,
-              "⛔ ဒီအချက်အလက်ကို စီမံသူတစ်ယောက်တည်းသာ ကြည့်နိုင်ပါသည်။"
-            );
-            return new Response("OK");
-          }
           const args = text.split(/\s+/);
-          const limit =
-            args[1] === undefined
-              ? 10
-              : Number(args[1]);
-
-          if (
-            !Number.isInteger(limit) ||
-            limit <= 0 ||
-            limit > 100
-          ) {
-            await sendMessage(
-              env.BOT_TOKEN,
-              chatId,
-              "အသုံးပြုပုံ\n/top\n/top 20"
-            );
-
+          const limit = args[1] === undefined ? 10 : Number(args[1]);
+          if (!Number.isInteger(limit) || limit <= 0 || limit > 100) {
+            await sendPrivateNotice(env, userId, chatId, "အသုံးပြုပုံ\n/top\n/top 20");
             return new Response("OK");
           }
-
-          const rows =
-            await getTopNumbers(
-              env.DB,
-              chatId,
-              limit
-            );
-
-          const msg = rows.length
-            ? `🏆 TOP ${limit} NUMBERS\n\n` +
-              rows
-                .map(
-                  (row, index) =>
-                    `${index + 1}. ` +
-                    `${row.number} = ` +
-                    `${formatMoney(row.total_amount)}`
-                )
-                .join("\n")
-            : "📭 ထိုးထားသောဂဏန်း မရှိသေးပါ။";
-
-          await sendLongMessage(
-            env.BOT_TOKEN,
-            chatId,
-            msg
-          );
-
+          await handlePrivateGroupReport(env, {
+            groupId: chatId, userId, isGroup, type: "top", limit
+          });
           return new Response("OK");
         }
 
@@ -519,114 +526,28 @@ export default {
         }
 
         if (text.startsWith("/below")) {
-          if (!canManageGroupLedger) {
-            await sendMessage(
-              env.BOT_TOKEN,
-              chatId,
-              "⛔ ဒီအချက်အလက်ကို စီမံသူတစ်ယောက်တည်းသာ ကြည့်နိုင်ပါသည်။"
-            );
-            return new Response("OK");
-          }
           const args = text.split(/\s+/);
-          const amount = Number(
-            String(args[1] || "")
-              .replace(/,/g, "")
-          );
-
-          if (
-            args.length !== 2 ||
-            !Number.isFinite(amount) ||
-            amount < 0
-          ) {
-            await sendMessage(
-              env.BOT_TOKEN,
-              chatId,
-              "အသုံးပြုပုံ\n/below 5000"
-            );
-
+          const amount = Number(String(args[1] || "").replace(/,/g, ""));
+          if (args.length !== 2 || !Number.isFinite(amount) || amount < 0) {
+            await sendPrivateNotice(env, userId, chatId, "အသုံးပြုပုံ\n/below 5000");
             return new Response("OK");
           }
-
-          const rows =
-            await getNumbersBelowAmount(
-              env.DB,
-              chatId,
-              amount
-            );
-
-          const msg = rows.length
-            ? `⬇️ ${formatMoney(amount)} အောက်\n\n` +
-              rows
-                .map(
-                  (row) =>
-                    `${row.number} = ` +
-                    `${formatMoney(row.total_amount)}`
-                )
-                .join("\n")
-            : `📭 ${formatMoney(amount)} အောက် ဂဏန်းမရှိပါ။`;
-
-          await sendLongMessage(
-            env.BOT_TOKEN,
-            chatId,
-            msg
-          );
-
+          await handlePrivateGroupReport(env, {
+            groupId: chatId, userId, isGroup, type: "below", amount
+          });
           return new Response("OK");
         }
 
         if (text.startsWith("/above")) {
-          if (!canManageGroupLedger) {
-            await sendMessage(
-              env.BOT_TOKEN,
-              chatId,
-              "⛔ ဒီအချက်အလက်ကို စီမံသူတစ်ယောက်တည်းသာ ကြည့်နိုင်ပါသည်။"
-            );
-            return new Response("OK");
-          }
           const args = text.split(/\s+/);
-          const amount = Number(
-            String(args[1] || "")
-              .replace(/,/g, "")
-          );
-
-          if (
-            args.length !== 2 ||
-            !Number.isFinite(amount) ||
-            amount < 0
-          ) {
-            await sendMessage(
-              env.BOT_TOKEN,
-              chatId,
-              "အသုံးပြုပုံ\n/above 10000"
-            );
-
+          const amount = Number(String(args[1] || "").replace(/,/g, ""));
+          if (args.length !== 2 || !Number.isFinite(amount) || amount < 0) {
+            await sendPrivateNotice(env, userId, chatId, "အသုံးပြုပုံ\n/above 10000");
             return new Response("OK");
           }
-
-          const rows =
-            await getNumbersAboveAmount(
-              env.DB,
-              chatId,
-              amount
-            );
-
-          const msg = rows.length
-            ? `⬆️ ${formatMoney(amount)} အထက်\n\n` +
-              rows
-                .map(
-                  (row) =>
-                    `${row.number} = ` +
-                    `${formatMoney(row.total_amount)}`
-                )
-                .join("\n")
-            : `📭 ${formatMoney(amount)} အထက် ဂဏန်းမရှိပါ။`;
-
-          await sendLongMessage(
-            env.BOT_TOKEN,
-            chatId,
-            msg
-          );
-
+          await handlePrivateGroupReport(env, {
+            groupId: chatId, userId, isGroup, type: "above", amount
+          });
           return new Response("OK");
         }
 
@@ -1065,7 +986,7 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
 `👑 မင်္ဂလာပါ စီမံသူ
 
 ━━━━━━━━━━━━━━
-✅ New Zealand 2D Ledger Bot v5.1.2
+✅ New Zealand 2D Ledger Bot v5.1.3
 ━━━━━━━━━━━━━━
 
 အောက်က မြန်မာခလုတ်တွေကို နှိပ်ပြီး စီမံနိုင်ပါပြီ။
@@ -1094,9 +1015,11 @@ Admin ထံ Group အသုံးပြုခွင့်တောင်းပ�
               return new Response("OK");
             }
 
+            const canSeeReports = isOwner(userId, env) ||
+              await hasAnyReportPermission(env.DB, chatId, userId);
             const keyboard = canManageGroupLedger
-              ? groupAdminMainKeyboard(false)
-              : userMainKeyboard(false);
+              ? groupAdminMainKeyboard(false, canSeeReports)
+              : userMainKeyboard(false, canSeeReports);
             await sendMessage(
               env.BOT_TOKEN,
               chatId,
@@ -1745,14 +1668,18 @@ function jsonResponse(
   );
 }
 
-function userMainKeyboard(selective = false) {
+function userMainKeyboard(selective = false, canSeeReports = false) {
+  const keyboard = [
+    ["🎲 ၂ဒီထိုးရန်", "📊 စာရင်းကြည့်ရန်"],
+    ["🔍 ဂဏန်းရှာရန်", "📖 အသုံးပြုနည်း"],
+    ["💎 အသင်းဝင်ရန်", "📞 စီမံသူဆက်သွယ်ရန်"],
+    ["🏠 ပင်မစာမျက်နှာ", "⌨️ ခလုတ်ဖျောက်ရန်"]
+  ];
+  if (canSeeReports) {
+    keyboard.splice(2, 0, ["📊 Report Menu"]);
+  }
   return {
-    keyboard: [
-      ["🎲 ၂ဒီထိုးရန်", "📊 စာရင်းကြည့်ရန်"],
-      ["🔍 ဂဏန်းရှာရန်", "📖 အသုံးပြုနည်း"],
-      ["💎 အသင်းဝင်ရန်", "📞 စီမံသူဆက်သွယ်ရန်"],
-      ["🏠 ပင်မစာမျက်နှာ", "⌨️ ခလုတ်ဖျောက်ရန်"]
-    ],
+    keyboard,
     resize_keyboard: true,
     is_persistent: true,
     selective,
@@ -1760,7 +1687,7 @@ function userMainKeyboard(selective = false) {
   };
 }
 
-async function handleUserKeyboard(env, chatId, text) {
+async function handleUserKeyboard(env, chatId, userId, isGroup, text) {
   if (text === "🎲 ၂ဒီထိုးရန်") {
     await sendMessage(
       env.BOT_TOKEN,
@@ -1803,7 +1730,10 @@ async function handleUserKeyboard(env, chatId, text) {
       env.BOT_TOKEN,
       chatId,
       "🏠 အသုံးပြုသူပင်မစာမျက်နှာ",
-      userMainKeyboard()
+      userMainKeyboard(
+        false,
+        isGroup && (isOwner(userId, env) || await hasAnyReportPermission(env.DB, chatId, userId))
+      )
     );
     return true;
   }
@@ -1821,18 +1751,24 @@ async function handleUserKeyboard(env, chatId, text) {
   return false;
 }
 
-function groupAdminMainKeyboard(selective = false) {
-  return {
-    keyboard: [
-      ["🎲 ၂ဒီထိုးရန်", "📊 စာရင်းကြည့်ရန်"],
-      ["🔍 ဂဏန်းရှာရန်", "📖 အသုံးပြုနည်း"],
-      ["💰 စုစုပေါင်းအရောင်း", "🏆 အများဆုံးဂဏန်း"],
+function groupAdminMainKeyboard(selective = false, canSeeReports = false) {
+  const keyboard = [
+    ["🎲 ၂ဒီထိုးရန်", "📊 စာရင်းကြည့်ရန်"],
+    ["🔍 ဂဏန်းရှာရန်", "📖 အသုံးပြုနည်း"],
+    ["💰 စုစုပေါင်းအရောင်း"],
+    ["♻️ စာရင်းရှင်းရန်"],
+    ["💎 အသင်းဝင်ရန်", "📞 စီမံသူဆက်သွယ်ရန်"],
+    ["🏠 ပင်မစာမျက်နှာ", "⌨️ ခလုတ်ဖျောက်ရန်"]
+  ];
+  if (canSeeReports) {
+    keyboard.splice(3, 0,
+      ["🏆 အများဆုံးဂဏန်း"],
       ["📉 ၅,၀၀၀ အောက်", "📈 ၁၀,၀၀၀ အထက်"],
-      ["🎯 မထိုးရသေးသောဂဏန်း"],
-      ["♻️ စာရင်းရှင်းရန်"],
-      ["💎 အသင်းဝင်ရန်", "📞 စီမံသူဆက်သွယ်ရန်"],
-      ["🏠 ပင်မစာမျက်နှာ", "⌨️ ခလုတ်ဖျောက်ရန်"]
-    ],
+      ["🎯 မထိုးရသေးသောဂဏန်း"]
+    );
+  }
+  return {
+    keyboard,
     resize_keyboard: true,
     is_persistent: true,
     selective,
@@ -1840,13 +1776,13 @@ function groupAdminMainKeyboard(selective = false) {
   };
 }
 
-async function handleGroupAdminKeyboard(env, chatId, text) {
+async function handleGroupAdminKeyboard(env, chatId, userId, text) {
   if (text === "🏠 ပင်မစာမျက်နှာ") {
     await sendMessage(
       env.BOT_TOKEN,
       chatId,
       "👑 အုပ်စုစီမံသူ ပင်မစာမျက်နှာ",
-      groupAdminMainKeyboard()
+      groupAdminMainKeyboard(false, isOwner(userId, env) || await hasAnyReportPermission(env.DB, chatId, userId))
     );
     return true;
   }
@@ -1894,6 +1830,7 @@ function adminMainKeyboard() {
     keyboard: [
       ["👤 အသုံးပြုသူများ", "👥 အုပ်စုများ"],
       ["📊 စာရင်းစီမံရန်", "💰 အရောင်းကြည့်ရန်"],
+      ["🔐 Report ခွင့်"],
       ["⌨️ ခလုတ်ဖျောက်ရန်"]
     ],
     resize_keyboard: true,
@@ -1961,6 +1898,23 @@ async function handleAdminKeyboard(env, chatId, text) {
 
   if (text === "💰 အရောင်းကြည့်ရန်") {
     return false;
+  }
+
+  if (text === "🔐 Report ခွင့်") {
+    await sendMessage(env.BOT_TOKEN, chatId,
+`🔐 Report ခွင့်ပေး/ပိတ်ရန်
+
+✅ ခွင့်ပေးရန်
+/reportgrant GROUP_ID USER_ID all
+
+🚫 ပြန်ပိတ်ရန်
+/reportrevoke GROUP_ID USER_ID all
+
+🔎 အခြေအနေစစ်ရန်
+/reportpermissions GROUP_ID USER_ID
+
+Report တစ်ခုချင်း: top, below, above, untouched`);
+    return true;
   }
 
   if (text === "🔙 ပင်မစာမျက်နှာ") {
@@ -2084,6 +2038,15 @@ async function handleAdminCallback(env, callbackQuery) {
     await resetTransactions(env.DB, chatId);
     await answerCallbackQuery(env.BOT_TOKEN, callbackId, "စာရင်းရှင်းပြီးပါပြီ ✅");
     await sendMessage(env.BOT_TOKEN, chatId, "✅ ဒီအုပ်စု၏ စာရင်းကို ရှင်းပြီးပါပြီ။");
+    return;
+  }
+
+  if (data.startsWith("rpt:")) {
+    const parts = data.split(":");
+    const type = parts[1];
+    const groupId = Number(parts[2]);
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Report ပို့နေပါပြီ…");
+    await handlePrivateGroupReport(env, { groupId, userId: fromId, isGroup: true, type });
     return;
   }
 
@@ -2213,7 +2176,7 @@ async function handleAdminCallback(env, callbackQuery) {
   if (action === "restore") {
     await restoreGroup(env.DB, groupId);
     await answerCallbackQuery(env.BOT_TOKEN, callbackId, "ပြန်ယူပြီးပါပြီ ♻️");
-    await sendMessage(env.BOT_TOKEN, chatId, `♻️ အုပ်စုကို ပိတ်ထားသောစာရင်းထဲ ပြန်ယူပြီးပါပြီ။\n\n👥 ${group.group_title || "အမည်မရှိ"}`);
+    await sendMessage(env.BOT_TOKEN, chatId, `♻️ အုပ်စုကို အသုံးပြုနေသောစာရင်းထဲ ပြန်ဖွင့်ပြီးပါပြီ။\n\n👥 ${group.group_title || "အမည်မရှိ"}`);
     return;
   }
 
@@ -2279,6 +2242,144 @@ function mapAdminButtonToCommand(text) {
   };
 
   return commands[text] || text;
+}
+
+async function sendPrivateNotice(env, userId, sourceChatId, text) {
+  try {
+    await sendMessage(env.BOT_TOKEN, userId, text);
+    return true;
+  } catch (error) {
+    console.error("Private message failed:", error);
+    if (Number(sourceChatId) !== Number(userId)) {
+      await sendMessage(
+        env.BOT_TOKEN,
+        sourceChatId,
+        "🔒 Private Chat မှာပို့မရပါ။ Bot ကို Private မှာ /start အရင်နှိပ်ပါ။"
+      );
+    }
+    return false;
+  }
+}
+
+async function sendPrivateReportMenu(env, groupId, userId) {
+  const types = ["top", "below", "above", "untouched"];
+  const allowed = [];
+  for (const type of types) {
+    if (isOwner(userId, env) || await hasReportPermission(env.DB, groupId, userId, type)) {
+      allowed.push(type);
+    }
+  }
+
+  if (!allowed.length) {
+    await sendPrivateNotice(
+      env,
+      userId,
+      groupId,
+      "⛔ ဒီ Group အတွက် Report ကြည့်ခွင့် မရှိပါ။ Owner ထံ ခွင့်တောင်းပါ။"
+    );
+    return;
+  }
+
+  const labels = {
+    top: "🏆 အများဆုံးဂဏန်း",
+    below: "📉 ၅,၀၀၀ အောက်",
+    above: "📈 ၁၀,၀၀၀ အထက်",
+    untouched: "🎯 မထိုးရသေး"
+  };
+  const buttons = allowed.map((type) => [{
+    text: labels[type],
+    callback_data: `rpt:${type}:${groupId}`
+  }]);
+
+  try {
+    await sendMessage(
+      env.BOT_TOKEN,
+      userId,
+      `📊 Report Menu
+
+ကြည့်လိုသော Report ကို ရွေးပါ။`,
+      { inline_keyboard: buttons }
+    );
+  } catch (error) {
+    await sendMessage(
+      env.BOT_TOKEN,
+      groupId,
+      "🔒 Report Menu ကို Private မှာပို့မရပါ။ Bot ကို Private မှာ /start အရင်နှိပ်ပါ။"
+    );
+  }
+}
+
+async function handlePrivateGroupReport(
+  env,
+  { groupId, userId, isGroup, type, limit = 10, amount = null }
+) {
+  if (!isGroup || !Number.isSafeInteger(Number(groupId)) || Number(groupId) >= 0) {
+    await sendPrivateNotice(
+      env,
+      userId,
+      groupId,
+      "❌ Report ကို သက်ဆိုင်ရာ Group ထဲကနေ အသုံးပြုပါ။"
+    );
+    return;
+  }
+
+  const allowed = isOwner(userId, env) ||
+    await hasReportPermission(env.DB, groupId, userId, type);
+
+  if (!allowed) {
+    await sendPrivateNotice(
+      env,
+      userId,
+      groupId,
+      "⛔ ဒီ Report ကို ကြည့်ခွင့် မရှိပါ။ Owner ထံ ခွင့်တောင်းပါ။"
+    );
+    return;
+  }
+
+  let msg = "";
+
+  if (type === "untouched") {
+    const rows = await getUntouchedNumbers(env.DB, groupId);
+    msg = rows.length
+      ? `🎯 မထိုးရသေးသောဂဏန်းများ
+━━━━━━━━━━━━━━━━━━
+${rows.map((row) => row.number).join(" ")}`
+      : "✅ 00 မှ 99 အထိ ဂဏန်းအားလုံး ထိုးပြီးပါပြီ။";
+  } else if (type === "top") {
+    const rows = await getTopNumbers(env.DB, groupId, limit);
+    msg = rows.length
+      ? `🏆 အများဆုံး ${limit} ဂဏန်း
+━━━━━━━━━━━━━━━━━━
+${rows.map((row, index) => `${index + 1}. ${row.number} = ${formatMoney(row.total_amount)}`).join("\n")}`
+      : "📭 ထိုးထားသောဂဏန်း မရှိသေးပါ။";
+  } else if (type === "below") {
+    const value = amount === null ? 5000 : amount;
+    const rows = await getNumbersBelowAmount(env.DB, groupId, value);
+    msg = rows.length
+      ? `📉 ${formatMoney(value)} အောက် ဂဏန်းများ
+━━━━━━━━━━━━━━━━━━
+${rows.map((row) => `${row.number} = ${formatMoney(row.total_amount)}`).join("\n")}`
+      : `📭 ${formatMoney(value)} အောက် ဂဏန်းမရှိပါ။`;
+  } else if (type === "above") {
+    const value = amount === null ? 10000 : amount;
+    const rows = await getNumbersAboveAmount(env.DB, groupId, value);
+    msg = rows.length
+      ? `📈 ${formatMoney(value)} အထက် ဂဏန်းများ
+━━━━━━━━━━━━━━━━━━
+${rows.map((row) => `${row.number} = ${formatMoney(row.total_amount)}`).join("\n")}`
+      : `📭 ${formatMoney(value)} အထက် ဂဏန်းမရှိပါ။`;
+  } else {
+    await sendPrivateNotice(env, userId, groupId, "❌ Report အမျိုးအစား မမှန်ပါ။");
+    return;
+  }
+
+  await sendPrivateNotice(
+    env,
+    userId,
+    groupId,
+    `👥 Group ID : ${groupId}
+${msg}`
+  );
 }
 
 async function sendLongMessage(

@@ -1233,7 +1233,7 @@ ${String(
 
       return (
         `${number} ${item.label} ` +
-        `(${item.count})ကွပ် → ` +
+        `(${item.count}) ကွပ် → ` +
         `${formatMoney(item.totalAmount)} ကျပ်`
       );
     })

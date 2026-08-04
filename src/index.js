@@ -30,6 +30,9 @@ import {
   approveGroup,
   banGroup,
   unbanGroup,
+  archiveGroup,
+  restoreGroup,
+  deleteGroupPermanently,
   listGroups
 } from "./admin.js";
 
@@ -49,7 +52,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "5.1.1-calculator"
+        version: "5.1.2"
       });
     }
 
@@ -1062,7 +1065,7 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
 `👑 မင်္ဂလာပါ စီမံသူ
 
 ━━━━━━━━━━━━━━
-✅ New Zealand 2D Ledger Bot v5.1.0
+✅ New Zealand 2D Ledger Bot v5.1.2
 ━━━━━━━━━━━━━━
 
 အောက်က မြန်မာခလုတ်တွေကို နှိပ်ပြီး စီမံနိုင်ပါပြီ။
@@ -1255,11 +1258,9 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
               env.BOT_TOKEN,
               chatId,
 `🧮 Calculator
-
-${calculation.expression}
-
 ━━━━━━━━━━━━━━━━━━
-
+${calculation.expression}
+━━━━━━━━━━━━━━━━━━
 = ${calculation.formattedResult} ✅`
             );
 
@@ -1321,18 +1322,13 @@ ${String(
             0;
 
           const report = `📝 2D စာရင်း
+
 👤 ထိုးသူ : ${displayName}
-
-━━━━━━━━━━━━━━
-
+━━━━━━━━━━━━━━━━━━
 ${reportLines}
-
-━━━━━━━━━━━━━━
-
+━━━━━━━━━━━━━━━━━━
 💰 စုစုပေါင်း : ${formatMoney(grandTotal)} ကျပ်
-
-━━━━━━━━━━━━━━
-
+━━━━━━━━━━━━━━━━━━
 ⚠️ ဂဏန်း၊ ကွက်အရေအတွက်နှင့်
 ငွေပမာဏကို ပြန်လည်စစ်ဆေးပေးပါ။
 
@@ -1922,9 +1918,10 @@ function adminUserKeyboard() {
 function adminGroupKeyboard() {
   return {
     keyboard: [
-      ["📋 အုပ်စုစာရင်း"],
-      ["✅ အုပ်စုခွင့်ပြုရန်", "🚫 အုပ်စုပိတ်ရန်"],
-      ["🔓 အုပ်စုပြန်ဖွင့်ရန်"],
+      ["🟢 အသုံးပြုနေသောအုပ်စုများ"],
+      ["🔴 ပိတ်ထားသောအုပ်စုများ"],
+      ["📦 သိမ်းထားသောအုပ်စုများ"],
+      ["✅ အုပ်စုခွင့်ပြုရန်"],
       ["🔙 ပင်မစာမျက်နှာ"]
     ],
     resize_keyboard: true,
@@ -1983,13 +1980,18 @@ async function handleAdminKeyboard(env, chatId, text) {
     return true;
   }
 
-  if (text === "🚫 အုပ်စုပိတ်ရန်") {
-    await sendGroupPicker(env, chatId, "ban");
+  if (text === "🟢 အသုံးပြုနေသောအုပ်စုများ") {
+    await sendGroupPicker(env, chatId, "active");
     return true;
   }
 
-  if (text === "🔓 အုပ်စုပြန်ဖွင့်ရန်") {
-    await sendGroupPicker(env, chatId, "unban");
+  if (text === "🔴 ပိတ်ထားသောအုပ်စုများ") {
+    await sendGroupPicker(env, chatId, "disabled");
+    return true;
+  }
+
+  if (text === "📦 သိမ်းထားသောအုပ်စုများ") {
+    await sendGroupPicker(env, chatId, "archived");
     return true;
   }
 
@@ -2014,32 +2016,47 @@ async function handleAdminKeyboard(env, chatId, text) {
 async function sendGroupPicker(env, chatId, action) {
   const groups = await listGroups(env.DB);
 
-  if (!groups.length) {
-    await sendMessage(
-      env.BOT_TOKEN,
-      chatId,
-      "👥 Group စာရင်း မရှိသေးပါ။ Bot ကို Group ထဲထည့်ပြီး /groupid သို့ /start ပို့ပါ။"
-    );
+  const filters = {
+    approve: (group) => group.status !== "archived",
+    active: (group) => group.status === "approved",
+    disabled: (group) => group.status === "banned" || group.status === "pending",
+    archived: (group) => group.status === "archived"
+  };
+
+  const filteredGroups = groups.filter(filters[action] || (() => true));
+
+  if (!filteredGroups.length) {
+    const emptyMessages = {
+      active: "🟢 အသုံးပြုနေသောအုပ်စု မရှိသေးပါ။",
+      disabled: "🔴 ပိတ်ထားသောအုပ်စု မရှိသေးပါ။",
+      archived: "📦 သိမ်းထားသောအုပ်စု မရှိသေးပါ။",
+      approve: "👥 ခွင့်ပြုရန်အုပ်စု မရှိသေးပါ။"
+    };
+    await sendMessage(env.BOT_TOKEN, chatId, emptyMessages[action] || "👥 Group စာရင်း မရှိသေးပါ။");
     return;
   }
 
-  const actionLabels = {
+  const titles = {
     approve: "✅ ခွင့်ပြုမည့်အုပ်စုကို ရွေးပါ",
-    ban: "🚫 ပိတ်မည့်အုပ်စုကို ရွေးပါ",
-    unban: "🔓 ပြန်ဖွင့်မည့်အုပ်စုကို ရွေးပါ"
+    active: "🟢 အသုံးပြုနေသောအုပ်စုများ",
+    disabled: "🔴 ပိတ်ထားသောအုပ်စုများ",
+    archived: "📦 သိမ်းထားသောအုပ်စုများ"
   };
 
-  const buttons = groups.slice(0, 80).map((group) => [{
-    text: `${group.status === "approved" ? "✅" : group.status === "banned" ? "🚫" : "⏳"} ${String(group.group_title || "အမည်မရှိ").slice(0, 28)}`,
-    callback_data: `grp:${action}:${group.group_id}`
+  const buttons = filteredGroups.slice(0, 80).map((group) => [{
+    text: `${group.status === "approved" ? "🟢" : group.status === "archived" ? "📦" : "🔴"} ${String(group.group_title || "အမည်မရှိ").slice(0, 28)}`,
+    callback_data: `grp:${action === "approve" ? "approve" : "manage"}:${group.group_id}`
   }]);
 
-  await sendMessage(
-    env.BOT_TOKEN,
-    chatId,
-    actionLabels[action] || "အုပ်စုကို ရွေးပါ",
-    { inline_keyboard: buttons }
-  );
+  await sendMessage(env.BOT_TOKEN, chatId, titles[action] || "အုပ်စုကို ရွေးပါ", { inline_keyboard: buttons });
+}
+
+function isOwner(userId, env) {
+  const configuredOwnerId = Number(env.OWNER_ID);
+  if (Number.isSafeInteger(configuredOwnerId) && configuredOwnerId > 0) {
+    return Number(userId) === configuredOwnerId;
+  }
+  return isAdmin(userId, env);
 }
 
 async function handleAdminCallback(env, callbackQuery) {
@@ -2087,6 +2104,30 @@ async function handleAdminCallback(env, callbackQuery) {
 
   if (!group) {
     await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Group မတွေ့ပါ။", true);
+    return;
+  }
+
+  if (action === "manage") {
+    const buttons = [];
+    if (group.status === "approved") {
+      buttons.push([{ text: "🚫 အုပ်စုပိတ်ရန်", callback_data: `grp:ban:${groupId}` }]);
+    } else if (group.status === "archived") {
+      buttons.push([{ text: "♻️ ပြန်ယူရန်", callback_data: `grp:restore:${groupId}` }]);
+      if (isOwner(fromId, env)) {
+        buttons.push([{ text: "🗑️ အမြဲတမ်းဖျက်ရန်", callback_data: `grp:deleteask:${groupId}` }]);
+      }
+    } else {
+      buttons.push([{ text: "🔓 အုပ်စုပြန်ဖွင့်ရန်", callback_data: `grp:unban:${groupId}` }]);
+      buttons.push([{ text: "📦 သိမ်းထားရန်", callback_data: `grp:archive:${groupId}` }]);
+    }
+
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId);
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      `👥 အုပ်စုစီမံခန့်ခွဲမှု\n\n📌 အုပ်စု : ${group.group_title || "အမည်မရှိ"}\n🆔 ID : ${groupId}\n📍 အခြေအနေ : ${group.status}`,
+      { inline_keyboard: buttons }
+    );
     return;
   }
 
@@ -2159,6 +2200,46 @@ async function handleAdminCallback(env, callbackQuery) {
       chatId,
       `🔓 Group ကို ပြန်ဖွင့်ပြီးပါပြီ။\n\n👥 Group : ${group.group_title || "အမည်မရှိ"}\n🆔 Group ID : ${groupId}`
     );
+    return;
+  }
+
+  if (action === "archive") {
+    await archiveGroup(env.DB, groupId);
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "အုပ်စုကို သိမ်းထားပြီးပါပြီ 📦");
+    await sendMessage(env.BOT_TOKEN, chatId, `📦 အုပ်စုကို သိမ်းထားပြီးပါပြီ။\n\n👥 ${group.group_title || "အမည်မရှိ"}`);
+    return;
+  }
+
+  if (action === "restore") {
+    await restoreGroup(env.DB, groupId);
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "ပြန်ယူပြီးပါပြီ ♻️");
+    await sendMessage(env.BOT_TOKEN, chatId, `♻️ အုပ်စုကို ပိတ်ထားသောစာရင်းထဲ ပြန်ယူပြီးပါပြီ။\n\n👥 ${group.group_title || "အမည်မရှိ"}`);
+    return;
+  }
+
+  if (action === "deleteask") {
+    if (!isOwner(fromId, env)) {
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Owner သာ ဖျက်နိုင်ပါတယ်။", true);
+      return;
+    }
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId);
+    await sendMessage(env.BOT_TOKEN, chatId, `⚠️ အမြဲတမ်းဖျက်မှာ သေချာပါသလား။\n\n👥 ${group.group_title || "အမည်မရှိ"}`, {
+      inline_keyboard: [[
+        { text: "✅ ဖျက်မည်", callback_data: `grp:delete:${groupId}` },
+        { text: "❌ မဖျက်တော့ပါ", callback_data: `grp:manage:${groupId}` }
+      ]]
+    });
+    return;
+  }
+
+  if (action === "delete") {
+    if (!isOwner(fromId, env)) {
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Owner သာ ဖျက်နိုင်ပါတယ်။", true);
+      return;
+    }
+    await deleteGroupPermanently(env.DB, groupId);
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "အမြဲတမ်းဖျက်ပြီးပါပြီ 🗑️");
+    await sendMessage(env.BOT_TOKEN, chatId, `🗑️ အုပ်စုနှင့်သက်ဆိုင်သော Data များကို အမြဲတမ်းဖျက်ပြီးပါပြီ။\n\n👥 ${group.group_title || "အမည်မရှိ"}`);
     return;
   }
 

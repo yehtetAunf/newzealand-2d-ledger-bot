@@ -95,6 +95,32 @@ export async function unbanGroup(db, groupId) {
   `).bind(new Date().toISOString(), groupId).run();
 }
 
+
+export async function archiveGroup(db, groupId) {
+  await ensureLicensedGroups(db);
+  return db.prepare(`
+    UPDATE licensed_groups
+    SET status = 'archived', updated_at = ?
+    WHERE group_id = ?
+  `).bind(new Date().toISOString(), groupId).run();
+}
+
+export async function restoreGroup(db, groupId) {
+  await ensureLicensedGroups(db);
+  return db.prepare(`
+    UPDATE licensed_groups
+    SET status = 'banned', updated_at = ?
+    WHERE group_id = ?
+  `).bind(new Date().toISOString(), groupId).run();
+}
+
+export async function deleteGroupPermanently(db, groupId) {
+  await ensureLicensedGroups(db);
+  await db.prepare(`DELETE FROM ledger_totals WHERE scope_id = ?`).bind(groupId).run();
+  await db.prepare(`DELETE FROM transactions WHERE chat_id = ?`).bind(groupId).run();
+  return db.prepare(`DELETE FROM licensed_groups WHERE group_id = ?`).bind(groupId).run();
+}
+
 export async function getLicensedGroups(db) {
   await ensureLicensedGroups(db);
   const { results } = await db.prepare(`

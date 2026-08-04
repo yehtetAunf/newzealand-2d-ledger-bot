@@ -4,6 +4,9 @@ import {
   approveGroup as approveGroupDb,
   banGroup as banGroupDb,
   unbanGroup as unbanGroupDb,
+  archiveGroup as archiveGroupDb,
+  restoreGroup as restoreGroupDb,
+  deleteGroupPermanently as deleteGroupPermanentlyDb,
   getLicensedGroups
 } from "./database.js";
 
@@ -27,6 +30,18 @@ export async function banGroup(db, groupId) {
 
 export async function unbanGroup(db, groupId) {
   return unbanGroupDb(db, groupId);
+}
+
+export async function archiveGroup(db, groupId) {
+  return archiveGroupDb(db, groupId);
+}
+
+export async function restoreGroup(db, groupId) {
+  return restoreGroupDb(db, groupId);
+}
+
+export async function deleteGroupPermanently(db, groupId) {
+  return deleteGroupPermanentlyDb(db, groupId);
 }
 
 export async function listUsers(db) {

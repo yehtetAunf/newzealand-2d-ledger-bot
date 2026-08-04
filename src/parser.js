@@ -166,12 +166,12 @@ function parseBetExpression(
   );
   if (gapItem) return [gapItem];
 
-  const directItem = parseDirectExpression(
+  const directItems = parseDirectExpression(
     expression,
     amount,
     originalLabel
   );
-  if (directItem) return [directItem];
+  if (directItems) return directItems;
 
   if (/^\d{3,8}$/.test(expression)) {
     throw new Error(
@@ -421,12 +421,29 @@ function parseDirectExpression(expression, amount, label) {
 
   if (entries.length === 0) return null;
 
+  // R/® ကို ဂဏန်းအများကြီးအပေါ် တစ်ခါတည်းသုံးထားလျှင်
+  // Report မှာ ဂဏန်းတစ်ခုချင်းစီကို သီးခြားလိုင်းပြမည်။
+  // ဥပမာ 86-89-50-80R200 => 86R, 89R, 50R, 80R
+  if (reverseAll && entries.length > 1) {
+    return entries.map((entry) => {
+      const itemNumbers = expand2DEntries([entry], true);
+
+      return createBetItem({
+        label: `${entry.number}R`,
+        rule: "reverse",
+        numbers: itemNumbers,
+        count: itemNumbers.length,
+        amount
+      });
+    });
+  }
+
   const numbers = expand2DEntries(
     entries,
     reverseAll
   );
 
-  return createBetItem({
+  return [createBetItem({
     label: buildDirectLabel(
       expression,
       reverseAll
@@ -439,7 +456,7 @@ function parseDirectExpression(expression, amount, label) {
     numbers,
     count: numbers.length,
     amount
-  });
+  })];
 }
 
 function parseDirectSegment(segment) {
@@ -791,6 +808,17 @@ function normalizeMessage(text) {
     .replace(/(?:^|\s)(?:\d+\s*)?du(?:\s*\d+)?(?=\s|$)/giu, " ");
 
   const directExpr = String.raw`([0-9]{2}(?:\s*[.,/၊_-]\s*[0-9]{2})*)`;
+
+  // ဂဏန်းအုပ်စုနောက် Amount separator တစ်ခုနှင့် R/® တန်းလာသောပုံစံ။
+  // 67-89-09=®500, 67-89-09-R500, 67-89-09/R500,
+  // 67-89-09.R500, 67-89-09:R500 => 67-89-09R500
+  value = value.replace(
+    new RegExp(
+      `(^|\\n|\\s)${directExpr}\\s*(?:=|:|-|/|\\.)\\s*[Rr®Ⓡ]\\s*([\\d,]+)(?=\\s|$)`,
+      "giu"
+    ),
+    (_, lead, expression, amount) => `${lead}${expression}R${amount}`
+  );
 
   // B Rule: တည့်ငွေ + R/® ငွေကို amount နှစ်ခု ပေါင်းပြီး record တစ်ခုတည်းတွက်သည်။
   // 24.97=600R300 => 24.97 900

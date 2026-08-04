@@ -234,9 +234,11 @@ export function expand2DEntries(
     );
   }
 
-  return unique2DNumbers(
-    expandedNumbers
-  );
+  // User ရေးထားသော entry တစ်ခုချင်းစီ၏ position ကို မဖယ်ပါ။
+  // ဥပမာ 17 နှစ်ခါပါလျှင် နှစ်ခါလုံး ကွက်အဖြစ်တွက်ရမည်။
+  // အပူး 11R ကဲ့သို့ ကိုယ်တိုင်ပြောင်းပြန်တူသောဂဏန်းကိုတော့
+  // expand2DNumber() အတွင်းမှာပဲ တစ်ကြိမ်သာထားပြီးသားဖြစ်သည်။
+  return expandedNumbers;
 }
 
 /**

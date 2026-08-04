@@ -226,7 +226,7 @@ function parseBreakRule(expression, amount, label) {
 
 function parseKhwayRule(expression, amount, label) {
   const match = expression.match(
-    /^([0-9/.,၊_-]{2,20})\s*(အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ|khwepu|khwe|kp|kw)\s*(?:ပါ)?$/iu
+    /^([0-9/.,၊_-]{2,20})\s*(အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ|ခွ|khwepu|khwe|kp|kw)\s*(?:ပါ)?$/iu
   );
 
   if (!match) return null;
@@ -265,7 +265,7 @@ function parseKhwayRule(expression, amount, label) {
 
 function parseDigitRule(expression, amount, label) {
   const match = expression.match(
-    /^([0-9/.,၊_-]+)\s*(ပါတ်|ပတ်|ထိပ်|ပိတ်|pat|ht|pt)$/iu
+    /^([0-9/.,၊_-]+)\s*(ပါတ်|ပတ်|ပါ|ထိပ်|ပိတ်|pat|ht|pt)$/iu
   );
 
   if (!match) return null;
@@ -505,6 +505,19 @@ function tryExtractAmount(line) {
     );
   }
 
+  // Rule/ဂဏန်းနောက်က amount separator အဖြစ် = - / . : ကို လက်ခံသည်။
+  // / . - သည် expression အတွင်းမှာလည်း သုံးနိုင်သဖြင့် နောက်ဆုံး separator ကိုသာ
+  // စမ်းပြီး ဘယ်ဘက် expression သည် သိရှိပြီးသား rule ဖြစ်မှ amount အဖြစ်ယူသည်။
+  match = value.match(/^(.+?)\s*([=:\-\/.])\s*([\d,]+)$/u);
+
+  if (
+    match &&
+    (isRecognizedAttachedExpression(match[1]) ||
+      canBeDirectExpression(match[1]))
+  ) {
+    return validateExtractedAmount(match[1], match[3]);
+  }
+
   match = value.match(
     /^(.+?)\s+([\d,]+)$/u
   );
@@ -560,14 +573,14 @@ function isRecognizedAttachedExpression(
   }
 
   if (
-    /^[0-9/.,၊_-]{2,20}(အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ|khwepu|khwe|kp|kw)(?:ပါ)?$/iu
+    /^[0-9/.,၊_-]{2,20}(အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ|ခွ|khwepu|khwe|kp|kw)(?:ပါ)?$/iu
       .test(compact)
   ) {
     return true;
   }
 
   if (
-    /^[0-9/.,၊_-]+(ပါတ်|ပတ်|ထိပ်|ပိတ်|pat|ht|pt)$/iu
+    /^[0-9/.,၊_-]+(ပါတ်|ပတ်|ပါ|ထိပ်|ပိတ်|pat|ht|pt)$/iu
       .test(compact)
   ) {
     return true;
@@ -581,6 +594,15 @@ function isRecognizedAttachedExpression(
   }
 
   return false;
+}
+
+function canBeDirectExpression(expression) {
+  const value = String(expression || "")
+    .replace(/\s+/g, "")
+    .replace(/[Rr®Ⓡ]$/u, "")
+    .replace(/[\/.,၊_-]+/g, "");
+
+  return /^\d{2}(?:\d{2})*$/.test(value);
 }
 
 function validateExtractedAmount(
@@ -668,7 +690,9 @@ function normalizeDisplayLabel(label, amount) {
     ""
   );
 
-  return value.trim();
+  return value
+    .replace(/\s*[=:\-\/.]\s*$/u, "")
+    .trim();
 }
 
 function buildDirectLabel(expression, reverseAll) {
@@ -759,43 +783,57 @@ function normalizeMessage(text) {
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
     .replace(/[\u00a0\u2007\u202f]/g, " ")
-    .replace(/[Ⓡ®]/g, "R")
     .trim();
 
-  // DU ခေါင်းစဉ်ပုံစံများကို ဖယ်ရှားသည်။
-  // DU, DU1, DU 1, 9DU, 9 DU စသည်တို့ပါဝင်သည်။
+  // DU ခေါင်းစဉ်များ: DU, DU1, DU 1, 9DU, 9 DU
   value = value
     .replace(/(?:^|\n)\s*(?:\d+\s*)?du(?:\s*\d+)?\s*(?=\n|$)/giu, "\n")
     .replace(/(?:^|\s)(?:\d+\s*)?du(?:\s*\d+)?(?=\s|$)/giu, " ");
 
-  const expr = String.raw`([0-9]{2}(?:\s*[.,/၊_-]\s*[0-9]{2})*)`;
+  const directExpr = String.raw`([0-9]{2}(?:\s*[.,/၊_-]\s*[0-9]{2})*)`;
 
-  // တည့်ငွေ + R ငွေ ပုံစံများကို record နှစ်ခုအဖြစ် ခွဲသည်။
-  // 24.97=600R300, 24.97 ဒဲ့ 600 R 300, 24.97 600R300
+  // B Rule: တည့်ငွေ + R/® ငွေကို amount နှစ်ခု ပေါင်းပြီး record တစ်ခုတည်းတွက်သည်။
+  // 24.97=600R300 => 24.97 900
+  // 19-46-53-31ဒဲ့3000®2000 => ... 5000
+  // 24.97 600®300 => 24.97 900
   value = value.replace(
-    new RegExp(`(^|\\n|\\s)${expr}\\s*(?:ဒဲ့|=|\\s)\\s*([\\d,]+)\\s*R\\s*([\\d,]+)(?=\\s|$)`, "giu"),
-    (_, lead, expression, directAmount, reverseAmount) =>
-      `${lead}${expression} ${directAmount}\n${expression}R ${reverseAmount}`
+    new RegExp(
+      `(^|\\n|\\s)${directExpr}\\s*(?:ဒဲ့|=|\\s)\\s*([\\d,]+)\\s*[Rr®Ⓡ]\\s*([\\d,]+)(?=\\s|$)`,
+      "giu"
+    ),
+    (_, lead, expression, directAmount, reverseAmount) => {
+      const first = Number(String(directAmount).replace(/,/g, ""));
+      const second = Number(String(reverseAmount).replace(/,/g, ""));
+      return `${lead}${expression} ${first + second}`;
+    }
   );
 
   // တည့်ငွေတစ်မျိုးတည်း: 67=500, 67ဒဲ့500
   value = value.replace(
-    new RegExp(`(^|\\n|\\s)${expr}\\s*(?:ဒဲ့|=)\\s*([\\d,]+)(?=\\s|$)`, "giu"),
+    new RegExp(
+      `(^|\\n|\\s)${directExpr}\\s*(?:ဒဲ့|=)\\s*([\\d,]+)(?=\\s|$)`,
+      "giu"
+    ),
     (_, lead, expression, amount) => `${lead}${expression} ${amount}`
   );
 
-  // R/r ကို ပုံစံတူအဖြစ် ပြောင်းသည်။
-  value = value.replace(/r/giu, "R");
+  // Alias များ
+  value = value
+    .replace(/ခပ/gu, "အခွေပူး")
+    .replace(/ခွ(?!ေ|ပ)/gu, "အခွေ")
+    .replace(/([0-9/.,၊_-]+)\s*ပါ(?=\s*(?:[=:\-\/.]|\d))/gu, "$1ပါတ်");
+
+  // Reverse symbol များကို R တစ်မျိုးတည်း normalize လုပ်သည်။
+  value = value.replace(/[Ⓡ®]/g, "R").replace(/r/giu, "R");
 
   // Amount ပြီးနောက် record အသစ်ကို separator မပါဘဲ ဆက်ရေးထားသည့် case များ။
-  // R5056.78 => R50 + 56.78. End-of-line amount (R1000) ကို မခွဲပါ။
   value = value.replace(/R\s*(\d{3,})(?=[.,/၊_-])/giu, (whole, digits) => {
     const split = splitAmountAndFollowingDigits(digits);
     return split ? `R${split.amount}\n${split.tail}` : whole;
   });
 
   value = value.replace(
-    /(ခွေပူး|အခွေပူး|ခွေ|အခွေ)\s*(\d{3,})(?=[.,/၊_-])/giu,
+    /(အခွေပူး|အခွေ|ခွေပူး|ခွေ)\s*(\d{3,})(?=[.,/၊_-])/giu,
     (whole, keyword, digits) => {
       const split = splitAmountAndFollowingDigits(digits);
       return split ? `${keyword}${split.amount}\n${split.tail}` : whole;
@@ -804,7 +842,7 @@ function normalizeMessage(text) {
 
   // ပုံမှန် space ဖြင့် ခွဲထားသော multi-record များ။
   value = value.replace(
-    /(R\s*[\d,]+|(?:ခွေပူး|အခွေပူး|ခွေ|အခွေ)\s*[\d,]+)\s+(?=\d{2}(?:\s*[.,/၊_-]|\s*R|\s+r))/giu,
+    /(R\s*[\d,]+|(?:အခွေပူး|အခွေ|ခွေပူး|ခွေ)\s*[\d,]+)\s+(?=\d{2}(?:\s*[.,/၊_-]|\s*R))/giu,
     "$1\n"
   );
 

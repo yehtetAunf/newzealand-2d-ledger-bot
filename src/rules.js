@@ -576,6 +576,7 @@ export function normalizeFixedRuleName(
 
     "ဆယ်ပြည့်": "ဆယ်ပြည့်",
     "ဆယ်ပြည့်": "ဆယ်ပြည့်",
+    "ဆယ်ပြည်": "ဆယ်ပြည့်",
     "s": "ဆယ်ပြည့်",
     "ten": "ဆယ်ပြည့်",
     "sal": "ဆယ်ပြည့်",
@@ -685,6 +686,7 @@ export function normalizeDigitRuleName(
   if (
     value === "ပါတ်" ||
     value === "ပတ်" ||
+    value === "ပါ" ||
     value === "pat"
   ) {
     return "ပါတ်";

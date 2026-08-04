@@ -226,7 +226,7 @@ function parseBreakRule(expression, amount, label) {
 
 function parseKhwayRule(expression, amount, label) {
   const match = expression.match(
-    /^(\d{3,8})\s*(အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ|khwepu|khwe|kp|kw)\s*(?:ပါ)?$/iu
+    /^([0-9/.,၊_-]{2,20})\s*(အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ|khwepu|khwe|kp|kw)\s*(?:ပါ)?$/iu
   );
 
   if (!match) return null;
@@ -239,8 +239,14 @@ function parseKhwayRule(expression, amount, label) {
     normalizedKeyword === "khwepu" ||
     normalizedKeyword === "kp";
 
+  const khwayDigits = match[1].replace(/[^0-9]/g, "");
+
+  if (khwayDigits.length < 3 || khwayDigits.length > 8) {
+    throw new Error("အခွေဂဏန်းသည် 3 လုံးမှ 8 လုံးအတွင်း ဖြစ်ရပါမယ်။");
+  }
+
   const result = expandKhway(
-    match[1],
+    khwayDigits,
     includeDoubles
   );
 
@@ -554,7 +560,7 @@ function isRecognizedAttachedExpression(
   }
 
   if (
-    /^\d{3,8}(အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ|khwepu|khwe|kp|kw)(?:ပါ)?$/iu
+    /^[0-9/.,၊_-]{2,20}(အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ|khwepu|khwe|kp|kw)(?:ပါ)?$/iu
       .test(compact)
   ) {
     return true;
@@ -754,38 +760,49 @@ function normalizeMessage(text) {
     .replace(/\r/g, "\n")
     .replace(/[\u00a0\u2007\u202f]/g, " ")
     .replace(/[Ⓡ®]/g, "R")
-    .replace(/\bR\b/gi, "R")
     .trim();
 
-  // “9 DU”, “9Du”, “9du” စသည့် ခေါင်းစဉ်စာသားကိုသာ ဖယ်ရှားသည်။
-  // ဒီ token ကြောင့် စာရင်းတစ်ခုလုံး reject မဖြစ်စေရန် ဖြစ်သည်။
-  value = value.replace(/(?:^|\s)\d+\s*du(?=\s|$)/giu, " ");
+  // DU ခေါင်းစဉ်ပုံစံများကို ဖယ်ရှားသည်။
+  // DU, DU1, DU 1, 9DU, 9 DU စသည်တို့ပါဝင်သည်။
+  value = value
+    .replace(/(?:^|\n)\s*(?:\d+\s*)?du(?:\s*\d+)?\s*(?=\n|$)/giu, "\n")
+    .replace(/(?:^|\s)(?:\d+\s*)?du(?:\s*\d+)?(?=\s|$)/giu, " ");
 
-  // “24.97 ဒဲ့ 600 R 300” နှင့် “24.97=600R300” ကို
-  // တည့် 600 + ပြန် 300 ဟူသော record နှစ်ခုအဖြစ် ပြောင်းသည်။
+  const expr = String.raw`([0-9]{2}(?:\s*[.,/၊_-]\s*[0-9]{2})*)`;
+
+  // တည့်ငွေ + R ငွေ ပုံစံများကို record နှစ်ခုအဖြစ် ခွဲသည်။
+  // 24.97=600R300, 24.97 ဒဲ့ 600 R 300, 24.97 600R300
   value = value.replace(
-    /(^|\n|\s)(\d{2}(?:\s*[.,/၊_-]\s*\d{2})+)\s*(?:ဒဲ့|=)\s*([\d,]+)\s*R\s*([\d,]+)/giu,
+    new RegExp(`(^|\\n|\\s)${expr}\\s*(?:ဒဲ့|=|\\s)\\s*([\\d,]+)\\s*R\\s*([\\d,]+)(?=\\s|$)`, "giu"),
     (_, lead, expression, directAmount, reverseAmount) =>
       `${lead}${expression} ${directAmount}\n${expression}R ${reverseAmount}`
   );
 
-  // R5037 => R50 + next record 37, R500503492 => R500 + next 503492.
-  // Amount ကို 10 ဖြင့်စားပြတ်သည့် အတိုဆုံး prefix အဖြစ် ခွဲယူသည်။
-  value = value.replace(/R\s*(\d{3,})(?=\s|$|[^0-9])/giu, (whole, digits) => {
+  // တည့်ငွေတစ်မျိုးတည်း: 67=500, 67ဒဲ့500
+  value = value.replace(
+    new RegExp(`(^|\\n|\\s)${expr}\\s*(?:ဒဲ့|=)\\s*([\\d,]+)(?=\\s|$)`, "giu"),
+    (_, lead, expression, amount) => `${lead}${expression} ${amount}`
+  );
+
+  // R/r ကို ပုံစံတူအဖြစ် ပြောင်းသည်။
+  value = value.replace(/r/giu, "R");
+
+  // Amount ပြီးနောက် record အသစ်ကို separator မပါဘဲ ဆက်ရေးထားသည့် case များ။
+  // R5056.78 => R50 + 56.78. End-of-line amount (R1000) ကို မခွဲပါ။
+  value = value.replace(/R\s*(\d{3,})(?=[.,/၊_-])/giu, (whole, digits) => {
     const split = splitAmountAndFollowingDigits(digits);
     return split ? `R${split.amount}\n${split.tail}` : whole;
   });
 
-  // ခွေ10081 => ခွေ100 + next record 81 စသည့် ဆက်ရေးပုံများ။
   value = value.replace(
-    /(ခွေပူး|အခွေပူး|ခွေ|အခွေ)\s*(\d{3,})(?=\s|$|[^0-9])/giu,
+    /(ခွေပူး|အခွေပူး|ခွေ|အခွေ)\s*(\d{3,})(?=[.,/၊_-])/giu,
     (whole, keyword, digits) => {
       const split = splitAmountAndFollowingDigits(digits);
       return split ? `${keyword}${split.amount}\n${split.tail}` : whole;
     }
   );
 
-  // Record တစ်ခု၏ amount ပြီးနောက် နောက် 2D record ကို space ဖြင့်သာ ဆက်ရေးထားခြင်း။
+  // ပုံမှန် space ဖြင့် ခွဲထားသော multi-record များ။
   value = value.replace(
     /(R\s*[\d,]+|(?:ခွေပူး|အခွေပူး|ခွေ|အခွေ)\s*[\d,]+)\s+(?=\d{2}(?:\s*[.,/၊_-]|\s*R|\s+r))/giu,
     "$1\n"

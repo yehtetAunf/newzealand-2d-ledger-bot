@@ -858,18 +858,7 @@ export function validateGap(
     "ကပ်ဂဏန်း ညာဘက်"
   );
 
-  const sharedDigits = findSharedDigits(
-    leftDigits,
-    rightDigits
-  );
-
-  if (sharedDigits.length > 0) {
-    throw new Error(
-      "ကပ်ဂဏန်း ဘယ်ဘက်နဲ့ ညာဘက်မှာ " +
-      "တူညီသောဂဏန်း မပါရပါ။\n\n" +
-      `တူညီသောဂဏန်း: ${sharedDigits.join(", ")}`
-    );
-  }
+  // ဘယ်/ညာ နှစ်ဖက်တွင် ဘုံတူ digit ပါရှိခြင်းကို လက်ခံသည်။
 
   return {
     leftDigits,

@@ -56,7 +56,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "5.1.4"
+        version: "5.1.5"
       });
     }
 

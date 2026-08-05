@@ -212,6 +212,32 @@ export async function hasAnyReportPermission(db, groupId, userId) {
   ));
 }
 
+
+export async function listReportPermissionGroupsForUser(db, userId) {
+  await ensureReportPermissions(db);
+  await ensureLicensedGroups(db);
+  const { results } = await db.prepare(`
+    SELECT
+      rp.group_id,
+      COALESCE(lg.group_title, '') AS group_title,
+      rp.can_top,
+      rp.can_below,
+      rp.can_above,
+      rp.can_untouched
+    FROM report_permissions rp
+    LEFT JOIN licensed_groups lg ON lg.group_id = rp.group_id
+    WHERE rp.user_id = ?
+      AND (
+        rp.can_top = 1 OR
+        rp.can_below = 1 OR
+        rp.can_above = 1 OR
+        rp.can_untouched = 1
+      )
+    ORDER BY COALESCE(lg.group_title, ''), rp.group_id
+  `).bind(Number(userId)).all();
+  return results || [];
+}
+
 /* SCOPED NUMBER LEDGER */
 async function ensureLedgerTable(db) {
   await db.prepare(`

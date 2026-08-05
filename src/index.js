@@ -21,7 +21,8 @@ import {
   getReportPermissions,
   setReportPermission,
   hasReportPermission,
-  hasAnyReportPermission
+  hasAnyReportPermission,
+  listReportPermissionGroupsForUser
 } from "./database.js";
 
 import { hasAccess } from "./license.js";
@@ -56,7 +57,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "5.1.8"
+        version: "5.1.9"
       });
     }
 
@@ -143,6 +144,21 @@ export default {
             "📊 Report Menu": "/reportmenu"
           };
           text = userCommands[text] || text;
+        }
+
+        // သာမန် User များသည် Bot Private Chat ထဲတွင် 2D စာရင်းမတွက်နိုင်ပါ။
+        // /start, /help, Menu/Report စသည့် command များသာ Private မှ အသုံးပြုနိုင်ပြီး
+        // တိုက်ရိုက်ဂဏန်းစာရင်းကို Test Group ထဲတွင်သာ ရိုက်ရမည်။
+        if (!admin && !isGroup && !text.startsWith("/")) {
+          await sendMessage(
+            env.BOT_TOKEN,
+            chatId,
+            `⚠️ စမ်းသပ် 2D စာရင်းကို Test Group ထဲတွင်သာ ရိုက်နိုင်ပါသည်။
+
+📢 Test Group ထဲဝင်ပြီး စာရင်းကို Group ထဲမှာ ပို့ပါ။`,
+            await buildTestGroupJoinKeyboard(env)
+          );
+          return new Response("OK");
         }
 
         if (isGroup) {
@@ -439,11 +455,39 @@ Report အမျိုးအစား: all, top, below, above, untouched`);
         }
 
         if (text === "/reportmenu") {
-          if (!isGroup) {
-            await sendMessage(env.BOT_TOKEN, chatId, "❌ /reportmenu ကို Report ကြည့်လိုသော Group ထဲမှာ အသုံးပြုပါ။");
+          if (isGroup) {
+            await sendPrivateReportMenu(env, chatId, userId);
             return new Response("OK");
           }
-          await sendPrivateReportMenu(env, chatId, userId);
+
+          // Private Chat မှ Report Menu နှိပ်သော User အတွက်
+          // ခွင့်ရှိသော Group ကို DB မှ တိုက်ရိုက်ဖတ်ပြီး Filter Button များပြမည်။
+          const reportGroups = await listReportPermissionGroupsForUser(env.DB, userId);
+          if (!reportGroups.length) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              "⛔ Report ကြည့်ခွင့်ပေးထားသော Group မရှိသေးပါ။ Group Owner ထံ ခွင့်တောင်းပါ။"
+            );
+            return new Response("OK");
+          }
+
+          if (reportGroups.length === 1) {
+            await sendPrivateReportMenu(env, Number(reportGroups[0].group_id), userId);
+            return new Response("OK");
+          }
+
+          await sendMessage(
+            env.BOT_TOKEN,
+            chatId,
+            "📊 Report ကြည့်လိုသော Group ကို ရွေးပါ။",
+            {
+              inline_keyboard: reportGroups.map((group) => [{
+                text: `👥 ${group.group_title || group.group_id}`,
+                callback_data: `rpg:${group.group_id}`
+              }])
+            }
+          );
           return new Response("OK");
         }
 
@@ -1063,7 +1107,13 @@ Admin ထံ Group အသုံးပြုခွင့်တောင်းပ�
           }
 
           const access = hasAccess(user);
-          await sendMessage(env.BOT_TOKEN, chatId, buildWelcomeMessage(), userMainKeyboard());
+          const privateReportGroups = await listReportPermissionGroupsForUser(env.DB, userId);
+          await sendMessage(
+            env.BOT_TOKEN,
+            chatId,
+            buildWelcomeMessage(),
+            userMainKeyboard(false, privateReportGroups.length > 0)
+          );
           if (!access.ok) {
             await sendMessage(
               env.BOT_TOKEN,
@@ -2146,11 +2196,12 @@ async function handleAdminCallback(env, callbackQuery) {
     }
 
     await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Group ဝင်ထားကြောင်း စစ်ဆေးပြီးပါပြီ ✅");
+    const privateReportGroups = await listReportPermissionGroupsForUser(env.DB, fromId);
     await sendMessage(
       env.BOT_TOKEN,
       chatId,
       "✅ Test Group ထဲ ဝင်ထားကြောင်း အတည်ပြုပြီးပါပြီ။\n\nယခု Bot Menu ကို အသုံးပြုနိုင်ပါပြီ။",
-      userMainKeyboard()
+      userMainKeyboard(false, privateReportGroups.length > 0)
     );
     return;
   }
@@ -2246,6 +2297,25 @@ async function handleAdminCallback(env, callbackQuery) {
     await resetTransactions(env.DB, chatId);
     await answerCallbackQuery(env.BOT_TOKEN, callbackId, "စာရင်းရှင်းပြီးပါပြီ ✅");
     await sendMessage(env.BOT_TOKEN, chatId, "✅ ဒီအုပ်စု၏ စာရင်းကို ရှင်းပြီးပါပြီ။");
+    return;
+  }
+
+  if (data.startsWith("rpg:")) {
+    const groupId = Number(data.split(":")[1]);
+    if (!Number.isSafeInteger(groupId) || groupId >= 0) {
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Group ID မမှန်ပါ။", true);
+      return;
+    }
+
+    const canSee = isOwner(fromId, env) ||
+      await hasAnyReportPermission(env.DB, groupId, fromId);
+    if (!canSee) {
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, "ဒီ Group အတွက် Report ခွင့်မရှိပါ။", true);
+      return;
+    }
+
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Report Menu ဖွင့်နေပါပြီ…");
+    await sendPrivateReportMenu(env, groupId, fromId);
     return;
   }
 

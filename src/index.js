@@ -56,7 +56,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "5.1.5"
+        version: "5.1.8"
       });
     }
 
@@ -107,6 +107,16 @@ export default {
         }
 
         const now = new Date();
+
+        // Private User များသည် သတ်မှတ်ထားသော Test Group ထဲဝင်ထားမှ Bot ကို အသုံးပြုနိုင်မည်။
+        // /start မှာ Welcome + Join Button ပြမည်ဖြစ်သောကြောင့် /start ကို ဒီနေရာမှာ မပိတ်ပါ။
+        if (!admin && !isGroup && text !== "/start") {
+          const joined = await isRequiredTestGroupMember(env, userId);
+          if (!joined) {
+            await sendTestGroupJoinPrompt(env, chatId);
+            return new Response("OK");
+          }
+        }
 
         // Private Chat မှာ Bot Owner အတွက် စီမံသူ Menu ပြမယ်။
         if (admin && !isGroup) {
@@ -986,7 +996,7 @@ User ကို Bot ထဲမှာ /start အရင်နှိပ်ခို�
 `👑 မင်္ဂလာပါ စီမံသူ
 
 ━━━━━━━━━━━━━━
-✅ New Zealand 2D Ledger Bot v5.1.3
+✅ New Zealand 2D Ledger Bot v5.1.8
 ━━━━━━━━━━━━━━
 
 အောက်က မြန်မာခလုတ်တွေကို နှိပ်ပြီး စီမံနိုင်ပါပြီ။
@@ -1039,6 +1049,17 @@ Admin ထံ Group အသုံးပြုခွင့်တောင်းပ�
               from.first_name || ""
             );
             user = await getUser(env.DB, userId);
+          }
+
+          const joined = await isRequiredTestGroupMember(env, userId);
+          if (!joined) {
+            await sendMessage(
+              env.BOT_TOKEN,
+              chatId,
+              buildWelcomeMessage(),
+              await buildTestGroupJoinKeyboard(env)
+            );
+            return new Response("OK");
           }
 
           const access = hasAccess(user);
@@ -2111,6 +2132,29 @@ async function handleAdminCallback(env, callbackQuery) {
 
   if (!chatId) return;
 
+  // Test Group Join စစ်ဆေးရန် Button — Admin callback မဟုတ်သော User callback ဖြစ်သည်။
+  if (data === "verify_test_group_join") {
+    const joined = await isRequiredTestGroupMember(env, fromId);
+    if (!joined) {
+      await answerCallbackQuery(
+        env.BOT_TOKEN,
+        callbackId,
+        "Test Group ထဲ မဝင်ရသေးပါ။ အရင်ဝင်ပြီး ပြန်စစ်ပါ။",
+        true
+      );
+      return;
+    }
+
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Group ဝင်ထားကြောင်း စစ်ဆေးပြီးပါပြီ ✅");
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "✅ Test Group ထဲ ဝင်ထားကြောင်း အတည်ပြုပြီးပါပြီ။\n\nယခု Bot Menu ကို အသုံးပြုနိုင်ပါပြီ။",
+      userMainKeyboard()
+    );
+    return;
+  }
+
   if (data.startsWith("rpm:")) {
     if (!isOwner(fromId, env)) {
       await answerCallbackQuery(env.BOT_TOKEN, callbackId, "Bot Owner သာ Report ခွင့်ကို စီမံနိုင်ပါတယ်။", true);
@@ -2565,6 +2609,74 @@ async function sendLongMessage(
       )
     );
   }
+}
+
+function getRequiredTestGroupId(env) {
+  const configured = Number(env.TEST_GROUP_ID);
+  if (Number.isSafeInteger(configured) && configured < 0) return configured;
+  return -1004363051959;
+}
+
+async function isRequiredTestGroupMember(env, userId) {
+  const groupId = getRequiredTestGroupId(env);
+  try {
+    const response = await fetch(
+      `https://api.telegram.org/bot${env.BOT_TOKEN}/getChatMember?chat_id=${encodeURIComponent(groupId)}&user_id=${encodeURIComponent(userId)}`
+    );
+    const data = await response.json();
+    if (!data.ok || !data.result) return false;
+
+    const status = String(data.result.status || "");
+    if (["creator", "administrator", "member"].includes(status)) return true;
+    return status === "restricted" && data.result.is_member === true;
+  } catch (error) {
+    console.error("Required Test Group member check failed:", error);
+    return false;
+  }
+}
+
+async function getTestGroupInviteLink(env) {
+  const configured = String(env.TEST_GROUP_INVITE_LINK || "").trim();
+  if (configured) return configured;
+
+  const groupId = getRequiredTestGroupId(env);
+  try {
+    const response = await fetch(
+      `https://api.telegram.org/bot${env.BOT_TOKEN}/exportChatInviteLink`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: groupId })
+      }
+    );
+    const data = await response.json();
+    if (data.ok && typeof data.result === "string") return data.result;
+    console.error("exportChatInviteLink failed:", data);
+  } catch (error) {
+    console.error("Test Group invite link failed:", error);
+  }
+  return "https://t.me/NewZealand2D2026";
+}
+
+async function buildTestGroupJoinKeyboard(env) {
+  const inviteLink = await getTestGroupInviteLink(env);
+  return {
+    inline_keyboard: [
+      [{ text: "📢 Test Group ဝင်ရန်", url: inviteLink }],
+      [{ text: "✅ Group ဝင်ပြီးပါပြီ", callback_data: "verify_test_group_join" }]
+    ]
+  };
+}
+
+async function sendTestGroupJoinPrompt(env, chatId) {
+  await sendMessage(
+    env.BOT_TOKEN,
+    chatId,
+    `🔒 Bot အသုံးပြုရန် Private Test Group ထဲ အရင်ဝင်ပေးပါ။
+
+Group ဝင်ပြီးနောက် “✅ Group ဝင်ပြီးပါပြီ” ကို နှိပ်၍ စစ်ဆေးပါ။`,
+    await buildTestGroupJoinKeyboard(env)
+  );
 }
 
 async function isTelegramGroupAdmin(token, chatId, userId) {

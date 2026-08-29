@@ -107,6 +107,47 @@ export default {
           }
         }
 
+        // Admin user approval flow: enter only the User ID, then choose duration by button.
+        if (admin && replyPrompt.includes("ခွင့်ပြုမည့် User ID ကို ပို့ပါ")) {
+          const targetId = Number(originalText.replace(/\s+/g, ""));
+          if (!Number.isSafeInteger(targetId) || targetId <= 0) {
+            await sendMessage(env.BOT_TOKEN, chatId, "❌ User ID မမှန်ပါ။ ဂဏန်း ID ကိုပဲ ပို့ပါ။", {
+              force_reply: true,
+              input_field_placeholder: "ဥပမာ 8840114917"
+            });
+            return new Response("OK");
+          }
+
+          const targetUser = await getUser(env.DB, targetId);
+          if (!targetUser) {
+            await sendMessage(env.BOT_TOKEN, chatId, `❌ User မတွေ့ပါ။\n\nUser ID : ${targetId}\nUser ကို Bot ထဲမှာ /start အရင်နှိပ်ခိုင်းပါ။`);
+            return new Response("OK");
+          }
+
+          await sendMessage(
+            env.BOT_TOKEN,
+            chatId,
+            `👤 ခွင့်ပြုမည့် User\n\n🆔 User ID : ${targetId}\n\nသက်တမ်းကို Button နဲ့ရွေးပါ။`,
+            {
+              inline_keyboard: [
+                [
+                  { text: "၇ ရက်", callback_data: `usr:days:${targetId}:7` },
+                  { text: "၁၅ ရက်", callback_data: `usr:days:${targetId}:15` },
+                  { text: "၃၀ ရက်", callback_data: `usr:days:${targetId}:30` }
+                ],
+                [
+                  { text: "၆၀ ရက်", callback_data: `usr:days:${targetId}:60` },
+                  { text: "၉၀ ရက်", callback_data: `usr:days:${targetId}:90` }
+                ],
+                [
+                  { text: "♾ အမြဲတမ်း", callback_data: `usr:days:${targetId}:forever` }
+                ]
+              ]
+            }
+          );
+          return new Response("OK");
+        }
+
         const now = new Date();
 
         // Private User များသည် သတ်မှတ်ထားသော Test Group ထဲဝင်ထားမှ Bot ကို အသုံးပြုနိုင်မည်။
@@ -2009,13 +2050,26 @@ async function handleAdminKeyboard(env, chatId, text) {
   }
 
   const prompts = {
-    "✅ အသုံးပြုခွင့်ပေးရန်": "User ID နဲ့ ရက်အရေအတွက်ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/approve USER_ID 30\n\nနောက်အဆင့်မှာ ID မရိုက်ဘဲ ရွေးနိုင်တဲ့ Button စနစ် ထည့်ပေးမယ်။",
+    "✅ အသုံးပြုခွင့်ပေးရန်": null,
     "🚫 အသုံးပြုခွင့်ပိတ်ရန်": "ပိတ်မယ့် User ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/ban USER_ID",
     "🔓 အသုံးပြုခွင့်ပြန်ဖွင့်ရန်": "ပြန်ဖွင့်မယ့် User ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/unban USER_ID",
     "🔢 ဂဏန်းရှာရန်": "စစ်မယ့်ဂဏန်းကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/number 67",
     "📉 သတ်မှတ်ငွေအောက်": "ငွေပမာဏကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/below 5000",
     "📈 သတ်မှတ်ငွေအထက်": "ငွေပမာဏကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/above 10000"
   };
+
+  if (text === "✅ အသုံးပြုခွင့်ပေးရန်") {
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      "🆔 ခွင့်ပြုမည့် User ID ကို ပို့ပါ။\n\nဥပမာ : 8840114917\n\nရက်အရေအတွက် ရိုက်စရာမလိုပါ။ နောက်အဆင့်မှာ Button နဲ့ရွေးနိုင်ပါတယ်။",
+      {
+        force_reply: true,
+        input_field_placeholder: "User ID ရိုက်ပါ"
+      }
+    );
+    return true;
+  }
 
   if (prompts[text]) {
     await sendMessage(env.BOT_TOKEN, chatId, prompts[text]);
@@ -2334,6 +2388,47 @@ async function handleAdminCallback(env, callbackQuery) {
   }
 
   const parts = data.split(":");
+
+  if (parts[0] === "usr" && parts[1] === "days") {
+    const targetId = Number(parts[2]);
+    const duration = String(parts[3] || "");
+    if (!Number.isSafeInteger(targetId) || targetId <= 0) {
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, "User ID မမှန်ပါ။", true);
+      return;
+    }
+
+    const targetUser = await getUser(env.DB, targetId);
+    if (!targetUser) {
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, "User မတွေ့ပါ။", true);
+      return;
+    }
+
+    const license = buildLicense(duration);
+    if (!license.ok) {
+      await answerCallbackQuery(env.BOT_TOKEN, callbackId, license.message, true);
+      return;
+    }
+
+    await approveUser(env.DB, targetId, license.plan, license.expiresAt);
+    await answerCallbackQuery(env.BOT_TOKEN, callbackId, "ခွင့်ပြုပြီးပါပြီ ✅");
+    await sendMessage(
+      env.BOT_TOKEN,
+      chatId,
+      `✅ အသုံးပြုခွင့်ပေးပြီးပါပြီ။\n\n🆔 User ID : ${targetId}\n💎 Plan : ${license.plan}\n📅 Expire : ${license.expireText}`
+    );
+
+    try {
+      await sendMessage(
+        env.BOT_TOKEN,
+        targetId,
+        `✅ Admin မှ အသုံးပြုခွင့်ပေးပြီးပါပြီ။\n\n💎 Plan : ${license.plan}\n📅 သက်တမ်းကုန်မည့်နေ့ : ${license.expireText}\n\nယခု Bot ကို အသုံးပြုနိုင်ပါပြီ။`
+      );
+    } catch (error) {
+      console.error("Approval notification failed:", error);
+    }
+    return;
+  }
+
   if (parts[0] !== "grp") {
     await answerCallbackQuery(env.BOT_TOKEN, callbackId);
     return;

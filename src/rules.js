@@ -551,6 +551,7 @@ export function normalizeFixedRuleName(
     "အပူး": "အပူး",
     "အပူးစုံ": "အပူး",
     "ပူးစုံ": "အပူး",
+    "ပူး": "အပူး",
     "apu": "အပူး",
     "double": "အပူး",
 
@@ -563,12 +564,14 @@ export function normalizeFixedRuleName(
     "odddouble": "မပူး",
 
     "ပါဝါ": "ပါဝါ",
+    "ပါ": "ပါဝါ",
     "p": "ပါဝါ",
     "pw": "ပါဝါ",
     "power": "ပါဝါ",
 
     "နက္ခတ်": "နက္ခတ်",
     "နခတ်": "နက္ခတ်",
+    "နတ်": "နက္ခတ်",
     "n": "နက္ခတ်",
     "nt": "နက္ခတ်",
     "nakhat": "နက္ခတ်",
@@ -596,6 +599,7 @@ export function normalizeFixedRuleName(
     "sm": "စုံမ",
 
     "မစုံ": "မစုံ",
+    "မစ": "မစုံ",
     "ms": "မစုံ"
   };
 

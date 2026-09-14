@@ -55,19 +55,12 @@ export function parseBetMessage(inputText) {
     try {
       const ownAmount = tryExtractAmount(entry.text);
       const isBeforeLast = index < sourceLines.length - 1;
+      const useCarry = carryAmount && isBeforeLast && isDirectListWithoutExplicitAmount(entry.text);
 
-      const lineItems = ownAmount
-        ? parseBetExpression(
-            ownAmount.expression,
-            ownAmount.amount,
-            entry.text
-          )
-        : carryAmount && isBeforeLast
-  ? parseBetExpression(
-      `${entry.text} R`,
-      carryAmount,
-      `${entry.text}R`
-    )
+      const lineItems = useCarry
+        ? parseBetExpression(`${entry.text} R`, carryAmount, `${entry.text}R`)
+        : ownAmount
+          ? parseBetExpression(ownAmount.expression, ownAmount.amount, entry.text)
           : parseBetLine(entry.text);
 
       allItems.push(...lineItems);
@@ -131,6 +124,15 @@ function parseBetExpression(
   if (!expression) {
     throw new Error("ဂဏန်း သို့မဟုတ် Rule မတွေ့ပါ။");
   }
+
+  const inlineItems = parseInlineFixedRecords(expression, amount, originalLabel);
+  if (inlineItems) return inlineItems;
+
+  const parityBreakComboItem = parseParityBreakComboRule(expression, amount, originalLabel);
+  if (parityBreakComboItem) return [parityBreakComboItem];
+
+  const comboItem = parseCompoundFixedRule(expression, amount, originalLabel);
+  if (comboItem) return [comboItem];
 
   const fixedItem = parseFixedRule(
     expression,
@@ -198,6 +200,90 @@ function parseBetExpression(
   throw new Error(`နားမလည်သောစာရင်း: ${expression}`);
 }
 
+function parseCompoundFixedRule(expression, amount, label) {
+  let compact = String(expression || "").replace(/\s+/g, "");
+  if (!compact || /\d/.test(compact)) return null;
+
+  let groupReverse = false;
+  const trailing = compact.match(/[Rr®Ⓡ]$/u);
+  if (trailing) {
+    groupReverse = true;
+    compact = compact.slice(0, -1);
+  }
+
+  const tokens = [
+    "အပူးစုံ", "ပူးစုံ", "စုံစုံ", "မစုံ", "စုံမ", "မစ", "စမ", "မမ",
+    "စုံပူး", "မပူး", "ပါဝါ", "ပါ", "နက္ခတ်", "နခတ်", "နတ်", "အပူး", "ပူး"
+  ];
+  const tokenPattern = tokens.sort((a,b)=>b.length-a.length).join("|");
+  const re = new RegExp(`(${tokenPattern})`, "u");
+  const groups = [];
+  let rest = compact;
+
+  while (rest) {
+    const m = rest.match(re);
+    if (!m || m.index !== 0) return null;
+    groups.push(m[1]);
+    rest = rest.slice(m[1].length);
+  }
+  if (groups.length < 2) return null;
+
+  const numbers = [];
+  for (const rawRule of groups) {
+    const normalized = rawRule === "ပူး" ? "အပူး"
+      : (rawRule === "မစ" ? "မစုံ"
+      : (rawRule === "ပါ" ? "ပါဝါ"
+      : (rawRule === "နတ်" || rawRule === "နခတ်") ? "နက္ခတ်" : rawRule));
+    const base = getSpecialRuleNumbers(normalized);
+    numbers.push(...base);
+  }
+
+  if (groupReverse) {
+    numbers.push(...numbers.map(reverse2DForParser));
+  }
+
+  return createBetItem({
+    label: normalizeDisplayLabel(label, amount),
+    rule: groupReverse ? "compound_fixed_reverse" : "compound_fixed",
+    numbers,
+    count: numbers.length,
+    amount
+  });
+}
+
+function parseInlineFixedRecords(expression, amount, label) {
+  // Compact fixed-rule records with their own amounts, e.g. စမR5စမR00.
+  const source = String(expression || "").replace(/\s+/g, "");
+  if (!/[Rr®Ⓡ]\d+$/.test(source)) return null;
+
+  const tokenPattern = "အပူးစုံ|ပူးစုံ|စုံစုံ|မစုံ|စုံမ|မစ|စမ|မမ|စုံပူး|မပူး|ပါဝါ|နက္ခတ်|နခတ်|အပူး|ပူး";
+  const re = new RegExp(`^(${tokenPattern})([Rr®Ⓡ]?)(\\d+)(.*)$`, "u");
+  const items = [];
+  let rest = source;
+
+  while (rest) {
+    const m = rest.match(re);
+    if (!m) return null;
+    const rawRule = m[1];
+    const reverse = Boolean(m[2]);
+    const ownAmount = Number(m[3]);
+    if (!ownAmount) return null;
+    const normalized = rawRule === "ပူး" ? "အပူး" : rawRule === "မစ" ? "မစုံ" : rawRule;
+    const base = getSpecialRuleNumbers(normalized);
+    const numbers = reverse ? [...base, ...base.map(reverse2DForParser)] : base;
+    items.push(createBetItem({
+      label: `${rawRule}${reverse ? "R" : ""}`,
+      rule: reverse ? "fixed_reverse" : "fixed",
+      numbers,
+      count: numbers.length,
+      amount: String(ownAmount)
+    }));
+    rest = m[4];
+  }
+
+  return items.length ? items : null;
+}
+
 function parseFixedRule(expression, amount, label) {
   let compact = String(expression || "")
     .replace(/\s+/g, "")
@@ -228,6 +314,31 @@ function parseFixedRule(expression, amount, label) {
 function reverse2DForParser(number) {
   const value = String(number);
   return value.length === 2 ? `${value[1]}${value[0]}` : value;
+}
+
+function parseParityBreakComboRule(expression, amount, label) {
+  const compact = String(expression || "").replace(/\s+/g, "");
+  const match = compact.match(/^(စုံ|မ|စမ|မစ)(?:ဘရိတ်|b|br|bk|break|brake)(အပူး)?(?:ပါ)?$/iu);
+  if (!match) return null;
+
+  const parity = match[1] === "စုံ" ? "စုံဘရိတ်"
+    : match[1] === "မ" ? "မဘရိတ်"
+    : "စုံဘရိတ်-မဘရိတ်";
+  const numbers = getParityBreakRuleNumbers(parity) || [];
+  if (match[2]) {
+    const doubles = parity === "စုံဘရိတ်" ? ["00","22","44","66","88"]
+      : parity === "မဘရိတ်" ? ["11","33","55","77","99"]
+      : ["00","11","22","33","44","55","66","77","88","99"];
+    numbers.push(...doubles);
+  }
+
+  return createBetItem({
+    label: normalizeDisplayLabel(label, amount),
+    rule: match[2] ? `${parity}_အပူး` : parity,
+    numbers,
+    count: numbers.length,
+    amount
+  });
 }
 
 function parseParityBreakRule(expression, amount, label) {
@@ -317,25 +428,24 @@ function parseCombinedDigitRule(expression, amount, label) {
     .replace(/\s+/g, "");
 
   const match = compact.match(
-    /^(\d)ထိပ်\/?ပိတ်(အပူး)?(?:ပါ)?$/u
+    /^([0-9]{1,9})ထိပ်\/?ပိတ်(အပူး)?(?:ပါ)?$/u
   );
 
   if (!match) return null;
 
-  const digit = match[1];
+  const digits = match[1].split("");
   const includeDouble = Boolean(match[2]);
   const numbers = [];
 
-  // 8ထိပ်/ပိတ် = 19 unique entries.
-  for (let second = 0; second <= 9; second++) {
-    numbers.push(`${digit}${second}`);
+  for (const digit of digits) {
+    for (let second = 0; second <= 9; second++) {
+      numbers.push(`${digit}${second}`);
+    }
+    for (let first = 0; first <= 9; first++) {
+      if (first !== Number(digit)) numbers.push(`${first}${digit}`);
+    }
+    if (includeDouble) numbers.push(`${digit}${digit}`);
   }
-  for (let first = 0; first <= 9; first++) {
-    if (first !== Number(digit)) numbers.push(`${first}${digit}`);
-  }
-
-  // User's requested rule counts the double separately: 8ထိပ်/ပိတ်အပူး = 20.
-  if (includeDouble) numbers.push(`${digit}${digit}`);
 
   return createBetItem({
     label: normalizeDisplayLabel(label, amount),
@@ -663,7 +773,7 @@ function tryExtractAmount(line) {
   if (
     match &&
     (isRecognizedAttachedExpression(match[1]) ||
-      canBeDirectExpression(match[1]))
+      (match[2] !== "." && canBeDirectExpression(match[1])))
   ) {
     return validateExtractedAmount(match[1], match[3]);
   }
@@ -715,7 +825,15 @@ function isRecognizedAttachedExpression(
     return true;
   }
 
+  if (/^(?:(?:အပူးစုံ|ပူးစုံ|စုံစုံ|မစုံ|စုံမ|မစ|စမ|မမ|စုံပူး|မပူး|ပါဝါ|နက္ခတ်|နခတ်|အပူး|ပူး)[Rr®Ⓡ]?)+$/u.test(compact)) {
+    return true;
+  }
+
   if (/^(?:စမ|စုံမ|မစမ)[Rr®Ⓡ]?$/u.test(compact)) {
+    return true;
+  }
+
+  if (/^(?:စုံ|မ|စမ|မစ)(?:ဘရိတ်|b|br|bk|break|brake)(?:အပူး)?(?:ပါ)?$/iu.test(compact)) {
     return true;
   }
 
@@ -744,7 +862,7 @@ function isRecognizedAttachedExpression(
     return true;
   }
 
-  if (/^\d(?:ထိပ်\/?ပိတ်)(?:အပူး)?(?:ပါ)?$/u.test(compact)) {
+  if (/^\d{1,9}(?:ထိပ်\/?ပိတ်)(?:အပူး)?(?:ပါ)?$/u.test(compact)) {
     return true;
   }
 
@@ -775,7 +893,7 @@ function validateExtractedAmount(
     .replace(/,/g, "")
     .trim();
 
-  if (!/^\d+$/.test(amount) || Number(amount) <= 0) {
+  if (!/^\d+$/.test(amount) || Number(amount) < 0) {
     throw new Error("ထိုးငွေ (Amount) မမှန်ပါ။");
   }
 
@@ -785,33 +903,33 @@ function validateExtractedAmount(
   };
 }
 
+function isDirectListWithoutExplicitAmount(line) {
+  const value = String(line || "").trim();
+  if (!value || /[A-Za-zအ-အA-အ]/u.test(value)) return false;
+  if (/[Rr®Ⓡ]\s*[\d,]+$/u.test(value)) return false;
+  const normalized = value.replace(/[.,၊_\-*^:]+/g, " ").replace(/\s+/g, " ").trim();
+  const parts = normalized.split(" ").filter(Boolean);
+  if (parts.length >= 2 && parts.every((part) => /^\d{2}$/.test(part))) return true;
+  const digitsOnly = value.replace(/[^0-9]/g, "");
+  return digitsOnly.length >= 4 && digitsOnly.length % 2 === 0 && /^[0-9.,၊_\-*^:]+$/.test(value);
+}
+
 function detectCarryAmount(lines) {
   if (lines.length < 2) return null;
 
-  const hasAmountlessLine = lines
-    .slice(0, -1)
-    .some((entry) => !tryExtractAmount(entry.text));
-
-  if (!hasAmountlessLine) return null;
-
   const lastLine = lines[lines.length - 1].text;
-  const match = lastLine.match(
-    /[Rr®Ⓡ]\s*([\d,]+)\s*$/u
-  );
-
-  if (!match) {
-    throw new Error(
-      "နောက်ဆုံးစာကြောင်းတွင် R/® နှင့် ထိုးငွေ မတွေ့ပါ။"
-    );
-  }
+  const match = lastLine.match(/[Rr®Ⓡ]\s*([\d,]+)\s*$/u);
+  if (!match) return null;
 
   const amount = match[1].replace(/,/g, "");
+  if (!/^\d+$/.test(amount)) return null;
 
-  if (!/^\d+$/.test(amount) || Number(amount) <= 0) {
-    throw new Error("ထိုးငွေ (Amount) မမှန်ပါ။");
+  const prior = lines.slice(0, -1);
+  if (prior.some((entry) => isDirectListWithoutExplicitAmount(entry.text))) {
+    return amount;
   }
 
-  return amount;
+  return null;
 }
 
 function isIgnorableLabel(line) {
@@ -998,7 +1116,8 @@ function normalizeMessage(text) {
     .replace(/([0-9/.,၊_-]+)\s*ပါ(?=\s*(?:[=:\-\/.]|\d))/gu, "$1ပါတ်");
 
   // Reverse symbol များကို R တစ်မျိုးတည်း normalize လုပ်သည်။
-  value = value.replace(/Ⓡ/g, "R").replace(/r/giu, "R");
+  value = value.replace(/Ⓡ/g, "R");
+  value = value.replace(/(^|[^A-Za-z])r(?=\s*[\d,]+|\s*$)/giu, "$1R");
 
   // Amount ပြီးနောက် record အသစ်ကို separator မပါဘဲ ဆက်ရေးထားသည့် case များ။
   value = value.replace(/R\s*(\d{3,})(?=[.,/၊_-])/giu, (whole, digits) => {
@@ -1040,7 +1159,12 @@ function normalizeMessage(text) {
     "$1$2\n"
   );
   value = value.replace(
-    /((?:ထိပ်|ပိတ်)(?:အပူး)?(?:ပါ)?)\s*([\d,]+)\s*(?=\d{2}[.,/၊_\-*^:]|\d{2}\s)/giu,
+    /(\d{1,9}(?:ထိပ်\/?ပိတ်|ထိပ်|ပိတ်)(?:အပူး)?(?:ပါ)?)\s*([\d,]{3,}?)(?=\d{1,9}(?:ထိပ်\/?ပိတ်|ထိပ်|ပိတ်))/giu,
+    "$1$2\n"
+  );
+
+  value = value.replace(
+    /((?:ထိပ်|ပိတ်)(?:အပူး)?(?:ပါ)?)\s*([\d,]+)\s*(?=\d{2}[.,/၊_\-*^:]|\d{2}[ \t])/giu,
     "$1$2\n"
   );
 
@@ -1049,6 +1173,13 @@ function normalizeMessage(text) {
   value = value.replace(
     /((?:ထိပ်ပိတ်|ထိပ်|ပိတ်)(?:အပူး)?(?:ပါ)?)\s*([\d,]{3,})(?=\d{2}[.,/၊_\-*^:])/giu,
     "$1$2\n"
+  );
+
+  // Fixed Rule amount ပြီးနောက် နောက် Fixed Rule record ဆက်လာလျှင် ခွဲမည်။
+  // ဥပမာ - စုံစုံ®500မမ®500စမ®500မစ®500
+  value = value.replace(
+    /([R®]\s*[\d,]+)\s*(?=(?:အပူးစုံ|ပူးစုံ|စုံစုံ|မစုံ|စုံမ|မစ|စမ|မမ|စုံပူး|မပူး|ပါဝါ|နက္ခတ်|နခတ်|အပူး|ပူး)(?:R|r|®|Ⓡ)?)/giu,
+    "$1\n"
   );
 
   // ပုံမှန် space ဖြင့် ခွဲထားသော multi-record များ။

@@ -29,10 +29,10 @@ export function normalizeAmount(amount) {
 
   if (
     !Number.isSafeInteger(value) ||
-    value <= 0
+    value < 0
   ) {
     throw new Error(
-      "ထိုးငွေပမာဏသည် 0 ထက်ကြီးသော ဂဏန်းဖြစ်ရပါမယ်။"
+      "ထိုးငွေပမာဏသည် 0 နှင့်အထက် ဖြစ်ရပါမယ်။"
     );
   }
 

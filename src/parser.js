@@ -15,7 +15,8 @@ import {
   countGapRule,
   isFixedCountRule,
   isBreakKeyword,
-  getBreakRuleNumbers
+  getBreakRuleNumbers,
+  getParityBreakRuleNumbers
 } from "./rules.js";
 
 import {
@@ -138,6 +139,13 @@ function parseBetExpression(
   );
   if (fixedItem) return [fixedItem];
 
+  const parityBreakItem = parseParityBreakRule(
+    expression,
+    amount,
+    originalLabel
+  );
+  if (parityBreakItem) return [parityBreakItem];
+
   const breakItem = parseBreakRule(
     expression,
     amount,
@@ -191,20 +199,54 @@ function parseBetExpression(
 }
 
 function parseFixedRule(expression, amount, label) {
-  const compact = expression
+  let compact = String(expression || "")
     .replace(/\s+/g, "")
     .toLowerCase();
+
+  const reverse = /[Rr®Ⓡ]$/u.test(compact);
+  if (reverse) compact = compact.slice(0, -1);
 
   if (!isFixedCountRule(compact)) {
     return null;
   }
 
   const fixed = getFixedRuleCount(compact);
-  const numbers = getSpecialRuleNumbers(fixed.rule);
+  const baseNumbers = getSpecialRuleNumbers(fixed.rule);
+  const numbers = reverse
+    ? [...baseNumbers, ...baseNumbers.map((n) => reverse2DForParser(n))]
+    : baseNumbers;
 
   return createBetItem({
     label: normalizeDisplayLabel(label, amount),
-    rule: fixed.rule,
+    rule: reverse ? `${fixed.rule}_reverse` : fixed.rule,
+    numbers,
+    count: numbers.length,
+    amount
+  });
+}
+
+function reverse2DForParser(number) {
+  const value = String(number);
+  return value.length === 2 ? `${value[1]}${value[0]}` : value;
+}
+
+function parseParityBreakRule(expression, amount, label) {
+  const compact = String(expression || "")
+    .replace(/\s+/g, "");
+
+  const normalized = compact
+    .replace(/[–—−]/g, "-");
+
+  if (!["စုံဘရိတ်", "မဘရိတ်", "စုံဘရိတ်-မဘရိတ်"].includes(normalized)) {
+    return null;
+  }
+
+  const numbers = getParityBreakRuleNumbers(normalized);
+  if (!numbers || numbers.length === 0) return null;
+
+  return createBetItem({
+    label: normalized,
+    rule: normalized,
     numbers,
     count: numbers.length,
     amount
@@ -272,40 +314,32 @@ function parseKhwayRule(expression, amount, label) {
 
 function parseCombinedDigitRule(expression, amount, label) {
   const compact = String(expression || "")
-    .replace(/\s+/g, "")
-    .replace(/၊/g, ",");
+    .replace(/\s+/g, "");
 
-  // ဥပမာ - 8ထိပ်/ပိတ်အပူးပါ
-  // "ထိပ် + ပိတ်" ကို union လုပ်ပြီး 88 ကို တစ်ကွက်ပဲတွက်သည်။
   const match = compact.match(
-    /^(\d)(?:ထိပ်)\/?(?:ပိတ်)(?:အပူး)?(?:ပါ)?$/u
+    /^(\d)ထိပ်\/?ပိတ်(အပူး)?(?:ပါ)?$/u
   );
 
   if (!match) return null;
 
   const digit = match[1];
+  const includeDouble = Boolean(match[2]);
   const numbers = [];
-  const seen = new Set();
 
+  // 8ထိပ်/ပိတ် = 19 unique entries.
   for (let second = 0; second <= 9; second++) {
-    const number = `${digit}${second}`;
-    if (!seen.has(number)) {
-      seen.add(number);
-      numbers.push(number);
-    }
+    numbers.push(`${digit}${second}`);
+  }
+  for (let first = 0; first <= 9; first++) {
+    if (first !== Number(digit)) numbers.push(`${first}${digit}`);
   }
 
-  for (let first = 0; first <= 9; first++) {
-    const number = `${first}${digit}`;
-    if (!seen.has(number)) {
-      seen.add(number);
-      numbers.push(number);
-    }
-  }
+  // User's requested rule counts the double separately: 8ထိပ်/ပိတ်အပူး = 20.
+  if (includeDouble) numbers.push(`${digit}${digit}`);
 
   return createBetItem({
     label: normalizeDisplayLabel(label, amount),
-    rule: "ထိပ်ပိတ်အပူး",
+    rule: includeDouble ? "ထိပ်ပိတ်အပူး" : "ထိပ်ပိတ်",
     numbers,
     count: numbers.length,
     amount
@@ -432,6 +466,7 @@ function parseDirectExpression(expression, amount, label) {
   source = source.replace(/[\/.,၊_-]+$/u, "");
 
   let reverseAll = false;
+  let reverseLast = false;
 
   const separatedReverse = source.match(
     /\s+([Rr®Ⓡ])$/u
@@ -446,12 +481,26 @@ function parseDirectExpression(expression, amount, label) {
       /([Rr®Ⓡ])$/u
     );
 
-    if (
-      attachedReverse &&
-      count2DNumbers(source) > 1
-    ) {
-      reverseAll = true;
-      source = source.slice(0, -1);
+    if (attachedReverse) {
+      // ® attached to the final group means reverse all; R/r attached
+      // directly to a number means reverse that number only.
+      if (attachedReverse[1] === "®" || attachedReverse[1] === "Ⓡ") {
+        reverseAll = true;
+        source = source.slice(0, -1);
+      } else {
+        // R/r attached to a punctuated or fully compact multi-2D group
+        // is a group Reverse marker (e.g. 12.13.16...89r).
+        // When attached directly to the final member of a space-separated
+        // list (e.g. 15 25 67R), it applies only to that final member.
+        const hasPunctuationSeparator = /[.,၊_\-*^:]/u.test(source);
+        const isCompactMulti = !/\s/u.test(source) && count2DNumbers(source) > 1;
+        if (hasPunctuationSeparator || isCompactMulti) {
+          reverseAll = true;
+        } else {
+          reverseLast = true;
+        }
+        source = source.slice(0, -1);
+      }
     }
   }
 
@@ -475,6 +524,13 @@ function parseDirectExpression(expression, amount, label) {
   }
 
   if (entries.length === 0) return null;
+
+  if (reverseLast && !reverseAll) {
+    entries[entries.length - 1] = {
+      ...entries[entries.length - 1],
+      reverse: true
+    };
+  }
 
   // R/® ကို ဂဏန်းအများကြီးအပေါ် တစ်ခါတည်းသုံးထားလျှင်
   // Report မှာ ဂဏန်းတစ်ခုချင်းစီကို သီးခြားလိုင်းပြမည်။
@@ -566,13 +622,35 @@ function tryExtractAmount(line) {
     .replace(/\u00a0/g, " ")
     .trim();
 
+  // တည့်ငွေ + R/® ငွေ: 37ဒဲ့300®200 / 37=300®200 => 500
+  let combinedAmount = value.match(
+    /^(.+?)(?:ဒဲ့|=)\s*([\d,]+)\s*[Rr®Ⓡ]\s*([\d,]+)$/u
+  );
+
+  if (combinedAmount) {
+    const direct = Number(String(combinedAmount[2]).replace(/,/g, ""));
+    const reverse = Number(String(combinedAmount[3]).replace(/,/g, ""));
+    if (direct > 0 && reverse > 0) {
+      return validateExtractedAmount(
+        combinedAmount[1].trim(),
+        String(direct + reverse)
+      );
+    }
+  }
+
   let match = value.match(
     /^(.+?)([Rr®Ⓡ])\s*([\d,]+)$/u
   );
 
   if (match) {
+    const rawExpression = String(match[1] || "");
+    const hadSpaceBeforeReverse = /\s$/u.test(rawExpression);
+    const expression = hadSpaceBeforeReverse
+      ? `${rawExpression.trim()} ${match[2]}`
+      : `${rawExpression.trim()}${match[2]}`;
+
     return validateExtractedAmount(
-      `${match[1].trim()}${match[2]}`,
+      expression,
       match[3]
     );
   }
@@ -633,7 +711,11 @@ function isRecognizedAttachedExpression(
     .replace(/\s+/g, "")
     .toLowerCase();
 
-  if (isFixedCountRule(compact)) {
+  if (isFixedCountRule(compact.replace(/[Rr®Ⓡ]$/u, ""))) {
+    return true;
+  }
+
+  if (/^(?:စမ|စုံမ|မစမ)[Rr®Ⓡ]?$/u.test(compact)) {
     return true;
   }
 
@@ -641,6 +723,10 @@ function isRecognizedAttachedExpression(
     /^\d(ဘရိတ်|b|br|bk|break|brake)(?:ပါ)?$/iu
       .test(compact)
   ) {
+    return true;
+  }
+
+  if (["စုံဘရိတ်", "မဘရိတ်", "စုံဘရိတ်-မဘရိတ်"].includes(compact.replace(/[–—−]/g, "-"))) {
     return true;
   }
 
@@ -879,13 +965,14 @@ function normalizeMessage(text) {
     (_, lead, expression, amount) => `${lead}${expression}R${amount}`
   );
 
+
   // B Rule: တည့်ငွေ + R/® ငွေကို amount နှစ်ခု ပေါင်းပြီး record တစ်ခုတည်းတွက်သည်။
   // 24.97=600R300 => 24.97 900
   // 19-46-53-31ဒဲ့3000®2000 => ... 5000
   // 24.97 600®300 => 24.97 900
   value = value.replace(
     new RegExp(
-      `(^|\\n|\\s)${directExpr}\\s*(?:ဒဲ့|=|\\s)\\s*([\\d,]+)\\s*[Rr®Ⓡ]\\s*([\\d,]+)(?=\\s|$)`,
+      `(^|\\n|\\s)${directExpr}\\s*(?:ဒဲ့|=|\\s+(?=[\\d,]{3,}\\s*[Rr®Ⓡ]))\\s*([\\d,]+)\\s*[Rr®Ⓡ]\\s*([\\d,]+)(?=\\s|$)`,
       "giu"
     ),
     (_, lead, expression, directAmount, reverseAmount) => {
@@ -911,7 +998,7 @@ function normalizeMessage(text) {
     .replace(/([0-9/.,၊_-]+)\s*ပါ(?=\s*(?:[=:\-\/.]|\d))/gu, "$1ပါတ်");
 
   // Reverse symbol များကို R တစ်မျိုးတည်း normalize လုပ်သည်။
-  value = value.replace(/[Ⓡ®]/g, "R").replace(/r/giu, "R");
+  value = value.replace(/Ⓡ/g, "R").replace(/r/giu, "R");
 
   // Amount ပြီးနောက် record အသစ်ကို separator မပါဘဲ ဆက်ရေးထားသည့် case များ။
   value = value.replace(/R\s*(\d{3,})(?=[.,/၊_-])/giu, (whole, digits) => {

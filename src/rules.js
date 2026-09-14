@@ -165,10 +165,12 @@ export function expand2DNumber(
     return [value];
   }
 
-  return unique2DNumbers([
+  // Reverse ကို တစ်ကွက်ထပ်တွက်သည့်အတွက် အပူး (66R) လည်း
+  // 66 + reverse 66 = 2 ကြိမ်အဖြစ် amount နှစ်ဆတွက်ရမည်။
+  return [
     value,
     reverse2D(value)
-  ]);
+  ];
 }
 
 /**
@@ -590,6 +592,7 @@ export function normalizeFixedRuleName(
     "mm": "မမ",
 
     "စုံမ": "စုံမ",
+    "စမ": "စုံမ",
     "sm": "စုံမ",
 
     "မစုံ": "မစုံ",
@@ -1461,6 +1464,7 @@ export function isBreakKeyword(value) {
     "ဘရိတ်",
     "b",
     "br",
+    "bk",
     "break",
     "brake"
   ].includes(keyword);
@@ -1477,6 +1481,21 @@ export function getBreakRuleNumbers(digit) {
   }
 
   return [...BREAK_RULE_NUMBERS[value]];
+}
+
+export function getParityBreakRuleNumbers(type) {
+  const normalized = String(type ?? "").trim().replace(/\s+/g, "");
+
+  const digitsByType = {
+    "စုံဘရိတ်": ["0", "2", "4", "6", "8"],
+    "မဘရိတ်": ["1", "3", "5", "7", "9"],
+    "စုံဘရိတ်-မဘရိတ်": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"]
+  };
+
+  const digits = digitsByType[normalized];
+  if (!digits) return null;
+
+  return digits.flatMap((digit) => getBreakRuleNumbers(digit));
 }
 
 export function expandBreakRule(digit) {

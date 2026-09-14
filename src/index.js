@@ -1495,7 +1495,7 @@ Smart Ledger Bot ဖြစ်ပါသည်။
 
 ① 2D စာရင်းကို အလိုအလျောက်တွက်ချက်ပေးခြင်း
 ② Reverse — R / r / ® / Ⓡ
-③ Rule Alias — apu / p / n / t / b / br
+③ Rule Alias — apu / p / n / t / b / br / bk
 ④ အခွေ၊ အခွေပူး၊ အပူး၊ ပါဝါ၊ နက္ခတ်၊ ညီကို၊ ဘရိတ် စသည့် Rule များ
 ⑤ ကပ်ဂဏန်းနှင့် Space ပါ/မပါ ပုံစံများ
 ⑥ ကွက်နှင့် ငွေပမာဏ အလိုအလျောက်တွက်ချက်ခြင်း
@@ -1532,7 +1532,7 @@ function buildSmartBetErrorMessage(input, parserMessage = "") {
   const compact = original.replace(/\s+/g, "");
   const exampleBase = original.replace(/[Rr®Ⓡ]+$/u, "").trim();
   const numberListPattern = /\d{1,2}(?:\s*[-./,၊_]\s*\d{1,2})+/u;
-  const rulePattern = /(?:အပူး|စုံပူး|မပူး|ပါဝါ|နက္ခတ်|နခတ်|ညီကို|ဆယ်ပြည့်|ဆယ်ပြည့်|စုံစုံ|မမ|စုံမ|မစုံ|အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ|ဘရိတ်|ပါတ်|ပတ်|ထိပ်|ပိတ်|ကပ်|apu|sp|mp|pw|nt|mm|ss|sm|ms|khwepu|khwe|kp|kw|br|break|pat|ht|pt|cp)/iu;
+  const rulePattern = /(?:အပူး|စုံပူး|မပူး|ပါဝါ|နက္ခတ်|နခတ်|ညီကို|ဆယ်ပြည့်|ဆယ်ပြည့်|စုံစုံ|မမ|စုံမ|မစုံ|အ?ခွေပူး|အ?ခွေ|ခွေပူး|ခွေ|ခပ|ဘရိတ်|ပါတ်|ပတ်|ထိပ်|ပိတ်|ကပ်|apu|sp|mp|pw|nt|mm|ss|sm|ms|khwepu|khwe|kp|kw|br|bk|break|pat|ht|pt|cp)/iu;
 
   if (/^[Rr®Ⓡ]\s*[\d,]+$/u.test(original)) {
     return `❌ စာရင်းပုံစံ မှားနေပါတယ်။\n\n🔢 2D ဂဏန်း မတွေ့ပါ။\n\nမှန်ကန်သောပုံစံ\n78-90-67-35-42®500`;
@@ -1626,7 +1626,7 @@ function looksLike2DBetAttempt(value) {
   if (/(အခွေ|ခွေ|အခွေပူး|ခွေပူး|ကပ်|နက္ခတ်|ပါဝါ|ဆယ်ပြည့်|ညီကို|အပူး|စုံပူး|မပူး|မမ|စုံစုံ|ဘရိတ်|ပါတ်|ထိပ်|ပိတ်)/.test(text)) {
     return true;
   }
-  if (/(?:^|\s)(?:apu|khwe|khwepu|kp|kw|br|break|sp|mp|mm|ss|sm|ms|pw|nt|cp|ht|pt|pat|[pntsb])(?:\s|\d|$)/i.test(text)) {
+  if (/(?:^|\s)(?:apu|khwe|khwepu|kp|kw|br|bk|break|sp|mp|mm|ss|sm|ms|pw|nt|cp|ht|pt|pat|[pntsb])(?:\s|\d|$)/i.test(text)) {
     return true;
   }
 

@@ -152,6 +152,13 @@ function parseBetExpression(
   );
   if (khwayItem) return [khwayItem];
 
+  const combinedDigitRuleItem = parseCombinedDigitRule(
+    expression,
+    amount,
+    originalLabel
+  );
+  if (combinedDigitRuleItem) return [combinedDigitRuleItem];
+
   const digitRuleItem = parseDigitRule(
     expression,
     amount,
@@ -206,7 +213,7 @@ function parseFixedRule(expression, amount, label) {
 
 function parseBreakRule(expression, amount, label) {
   const match = expression.match(
-    /^([0-9])\s*(ဘရိတ်|b|br|break|brake)\s*(?:ပါ)?$/i
+    /^([0-9])\s*(ဘရိတ်|b|br|bk|break|brake)\s*(?:ပါ)?$/i
   );
 
   if (!match || !isBreakKeyword(match[2])) {
@@ -259,6 +266,48 @@ function parseKhwayRule(expression, amount, label) {
       : "khway",
     numbers: result.numbers,
     count: result.numbers.length,
+    amount
+  });
+}
+
+function parseCombinedDigitRule(expression, amount, label) {
+  const compact = String(expression || "")
+    .replace(/\s+/g, "")
+    .replace(/၊/g, ",");
+
+  // ဥပမာ - 8ထိပ်/ပိတ်အပူးပါ
+  // "ထိပ် + ပိတ်" ကို union လုပ်ပြီး 88 ကို တစ်ကွက်ပဲတွက်သည်။
+  const match = compact.match(
+    /^(\d)(?:ထိပ်)\/?(?:ပိတ်)(?:အပူး)?(?:ပါ)?$/u
+  );
+
+  if (!match) return null;
+
+  const digit = match[1];
+  const numbers = [];
+  const seen = new Set();
+
+  for (let second = 0; second <= 9; second++) {
+    const number = `${digit}${second}`;
+    if (!seen.has(number)) {
+      seen.add(number);
+      numbers.push(number);
+    }
+  }
+
+  for (let first = 0; first <= 9; first++) {
+    const number = `${first}${digit}`;
+    if (!seen.has(number)) {
+      seen.add(number);
+      numbers.push(number);
+    }
+  }
+
+  return createBetItem({
+    label: normalizeDisplayLabel(label, amount),
+    rule: "ထိပ်ပိတ်အပူး",
+    numbers,
+    count: numbers.length,
     amount
   });
 }
@@ -370,6 +419,12 @@ function parseDirectExpression(expression, amount, label) {
     .replace(/\s+/g, " ")
     .trim();
 
+  // (14:69) / (12:13:14:23) စသည့် grouped 2D စာရင်းများကို
+  // ကွင်းဖယ်ပြီး direct list အဖြစ် ဖတ်မည်။
+  if (/^[()]|[()]$/.test(source) || /\([^()]+\)/u.test(source)) {
+    source = source.replace(/[()]/g, "");
+  }
+
   source = source.replace(
     /[\/.,၊_-]+\s*([Rr®Ⓡ])$/u,
     "$1"
@@ -403,7 +458,7 @@ function parseDirectExpression(expression, amount, label) {
   source = source.replace(/[\/.,၊_-]+$/u, "");
 
   const parts = source
-    .replace(/[\/.,၊_-]+/g, " ")
+    .replace(/[\/.,၊_\-*^:]+/g, " ")
     .replace(/\s+/g, " ")
     .trim()
     .split(" ")
@@ -583,7 +638,7 @@ function isRecognizedAttachedExpression(
   }
 
   if (
-    /^\d(ဘရိတ်|b|br|break|brake)(?:ပါ)?$/iu
+    /^\d(ဘရိတ်|b|br|bk|break|brake)(?:ပါ)?$/iu
       .test(compact)
   ) {
     return true;
@@ -603,6 +658,10 @@ function isRecognizedAttachedExpression(
     return true;
   }
 
+  if (/^\d(?:ထိပ်\/?ပိတ်)(?:အပူး)?(?:ပါ)?$/u.test(compact)) {
+    return true;
+  }
+
   if (
     /^\d{1,9}[./_-]\d{1,9}(?:ကပ်|cp)$/iu
       .test(compact)
@@ -617,7 +676,7 @@ function canBeDirectExpression(expression) {
   const value = String(expression || "")
     .replace(/\s+/g, "")
     .replace(/[Rr®Ⓡ]$/u, "")
-    .replace(/[\/.,၊_-]+/g, "");
+    .replace(/[\/.,၊_\-*^:]+/g, "");
 
   return /^\d{2}(?:\d{2})*$/.test(value);
 }
@@ -807,7 +866,7 @@ function normalizeMessage(text) {
     .replace(/(?:^|\n)\s*(?:\d+\s*)?du(?:\s*\d+)?\s*(?=\n|$)/giu, "\n")
     .replace(/(?:^|\s)(?:\d+\s*)?du(?:\s*\d+)?(?=\s|$)/giu, " ");
 
-  const directExpr = String.raw`([0-9]{2}(?:\s*[.,/၊_-]\s*[0-9]{2})*)`;
+  const directExpr = String.raw`([0-9]{2}(?:\s*[.,/၊_\-*^:]\s*[0-9]{2})*)`;
 
   // ဂဏန်းအုပ်စုနောက် Amount separator တစ်ခုနှင့် R/® တန်းလာသောပုံစံ။
   // 67-89-09=®500, 67-89-09-R500, 67-89-09/R500,
@@ -866,6 +925,43 @@ function normalizeMessage(text) {
       const split = splitAmountAndFollowingDigits(digits);
       return split ? `${keyword}${split.amount}\n${split.tail}` : whole;
     }
+  );
+
+  // Parenthesized grouped records: (14:69)R300(12:13:14:23)R50
+  // R/® + amount ပြီးနောက် နောက် grouped record တန်းဆက်လာလျှင် newline ခွဲမည်။
+  value = value.replace(
+    /([Rr])\s*([\d,]+)\s*(?=\()/giu,
+    "$1$2\n"
+  );
+
+  // R/® amount နောက်မှာ နောက်ထပ် 2D စာရင်း ဆက်လာလျှင်သာ ခွဲမည်။
+  value = value.replace(
+    /R\s*([\d,]+)\s+(?=\d{2}(?:\s|[.,/၊_\-*^:]))/giu,
+    "R$1\n"
+  );
+
+  // R amount နောက်မှာ digit + rule တန်းဆက်လာခြင်း
+  // ဥပမာ 86R2504ထိပ်ပိတ်300 -> 86R250 / 4ထိပ်ပိတ်300
+  value = value.replace(
+    /R\s*([\d,]{3,})(?=\d(?:ထိပ်|ပိတ်|ဘရိတ်|b|br|bk|break|brake))/giu,
+    "R$1\n"
+  );
+
+  // Rule amount နောက်မှာ နောက် Rule/2D record တန်းဆက်လာတဲ့ compact ပုံစံများ။
+  value = value.replace(
+    /(ဘရိတ်|b|br|bk|break|brake)\s*([\d,]+)\s*(?=[.,/၊_\-*^:]\s*\d{2})/giu,
+    "$1$2\n"
+  );
+  value = value.replace(
+    /((?:ထိပ်|ပိတ်)(?:အပူး)?(?:ပါ)?)\s*([\d,]+)\s*(?=\d{2}[.,/၊_\-*^:]|\d{2}\s)/giu,
+    "$1$2\n"
+  );
+
+  // Rule amount နှင့် နောက် 2D ကို space မပါဘဲ ဆက်ရေးထားသောပုံစံ
+  // ဥပမာ 4ထိပ်ပိတ်30010..21.20R500
+  value = value.replace(
+    /((?:ထိပ်ပိတ်|ထိပ်|ပိတ်)(?:အပူး)?(?:ပါ)?)\s*([\d,]{3,})(?=\d{2}[.,/၊_\-*^:])/giu,
+    "$1$2\n"
   );
 
   // ပုံမှန် space ဖြင့် ခွဲထားသော multi-record များ။

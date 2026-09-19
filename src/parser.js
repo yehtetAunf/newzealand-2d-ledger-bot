@@ -1063,6 +1063,8 @@ function normalizeMessage(text) {
     .replace(/\r\n/g, "\n")
     .replace(/\r/g, "\n")
     .replace(/[\u00a0\u2007\u202f]/g, " ")
+    // Telegram/phone copy-paste may encode line breaks as zero-width spaces.
+    .replace(/[\u200b\ufeff]/g, "\n")
     .trim();
 
   // DU ခေါင်းစဉ်များ: DU, DU1, DU 1, 9DU, 9 DU

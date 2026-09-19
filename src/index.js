@@ -1339,9 +1339,7 @@ ${String(
           const reportLines =
   bet.items
     .map((item, index) => {
-      const number =
-        "①②③④⑤⑥⑦⑧⑨⑩"[index] ||
-        `${index + 1}.`;
+      const number = formatListNumber(index + 1);
 
       return (
         `${number} ${item.label} ` +
@@ -2856,6 +2854,17 @@ async function isTelegramGroupAdmin(token, chatId, userId) {
     console.error("Group admin check failed:", error);
     return false;
   }
+}
+
+/**
+ * Report စာရင်းနံပါတ်ကို ① မှ ㊿ အထိ ပြမယ်။
+ * 50 ကြောင်းကျော်သွားရင် 51. လို အာရဗီနံပါတ် fallback သုံးမယ်။
+ */
+function formatListNumber(position) {
+  const enclosedNumbers =
+    "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳㉑㉒㉓㉔㉕㉖㉗㉘㉙㉚㉛㉜㉝㉞㉟㊱㊲㊳㊴㊵㊶㊷㊸㊹㊺㊻㊼㊽㊾㊿";
+
+  return enclosedNumbers[position - 1] || `${position}.`;
 }
 
 async function sendMessage(

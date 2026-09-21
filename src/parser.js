@@ -128,6 +128,7 @@ function parseBetExpression(
   // rather than reversing only the final number.
   if (
     /[Rr]$/u.test(expression) &&
+    !/(?:^|\s)(?:b|br|bk|break|brake)$/iu.test(expression) &&
     /[Rr®Ⓡ]\s*[\d,]+$/u.test(String(originalLabel || "")) &&
     /\d{2}/u.test(expression) &&
     (expression.match(/\d{2}/g) || []).length > 1
@@ -227,7 +228,7 @@ function parseCompoundFixedRule(expression, amount, label) {
 
   const tokens = [
     "အပူးစုံ", "ပူးစုံ", "စုံစုံ", "မစုံ", "စုံမ", "မစ", "စမ", "မမ",
-    "စုံပူး", "မပူး", "ပါဝါ", "ပါ", "နက္ခတ်", "နခတ်", "နတ်", "အပူး", "ပူး"
+    "စုံပူး", "မပူး", "ပါဝါ", "ပါ", "ညီကို", "နက္ခတ်", "နခတ်", "နတ်", "အပူး", "ပူး"
   ];
   const tokenPattern = tokens.sort((a,b)=>b.length-a.length).join("|");
   const re = new RegExp(`(${tokenPattern})`, "u");
@@ -380,14 +381,28 @@ function parseParityBreakRule(expression, amount, label) {
 
 function parseBreakRule(expression, amount, label) {
   const match = expression.match(
-    /^([0-9])\s*(ဘရိတ်|b|br|bk|break|brake)\s*(?:ပါ)?$/i
+    /^([0-9]+)\s*(ဘရိတ်|b|br|bk|break|brake)\s*(?:ပါ)?$/i
   );
 
   if (!match || !isBreakKeyword(match[2])) {
     return null;
   }
 
-  const numbers = getBreakRuleNumbers(match[1]);
+  // Allow a compact digit group such as 0123456789br500.
+  // Each digit expands to its own break set, then the sets are merged
+  // while preserving order and removing duplicate 2D numbers.
+  const digits = [...match[1]];
+  const seen = new Set();
+  const numbers = [];
+
+  for (const digit of digits) {
+    for (const number of getBreakRuleNumbers(digit)) {
+      if (!seen.has(number)) {
+        seen.add(number);
+        numbers.push(number);
+      }
+    }
+  }
 
   return createBetItem({
     label: `${match[1]} ဘရိတ်`,
@@ -442,7 +457,7 @@ function parseCombinedDigitRule(expression, amount, label) {
     .replace(/\s+/g, "");
 
   const match = compact.match(
-    /^([0-9]{1,9})ထိပ်\/?ပိတ်(အပူး)?(?:ပါ)?$/u
+    /^([0-9]{1,10})ထိပ်\/?ပိတ်(အပူး)?(?:ပါ)?$/u
   );
 
   if (!match) return null;
@@ -516,7 +531,7 @@ function parseGapRule(expression, amount, label) {
   }
 
   const match = source.match(
-    /^(\d{1,9})\s*([./_-])\s*(\d{1,9})\s*(ကပ်|cp)?$/iu
+    /^(\d{1,10})\s*([./_-])\s*(\d{1,10})\s*(ကပ်|cp)?$/iu
   );
 
   if (!match) return null;
@@ -744,6 +759,8 @@ function extractAmount(line) {
 function tryExtractAmount(line) {
   const value = String(line || "")
     .replace(/\u00a0/g, " ")
+    .replace(/(ထိပ်)\s*[-:/.]\s*(ပိတ်)/gu, "$1/$2")
+    .replace(/(ပါဝါ|နခတ်|နက္ခတ်|ညီကို|စုံမ|မစုံ|စုံစုံ|မမ|အပူး|ပူး)\s*[/,:-]\s*(?=(ပါဝါ|နခတ်|နက္ခတ်|ညီကို|စုံမ|မစုံ|စုံစုံ|မမ|အပူး|ပူး))/gu, "$1")
     .trim();
 
   // တည့်ငွေ + R/® ငွေ: 37ဒဲ့300®200 / 37=300®200 => 500
@@ -762,8 +779,22 @@ function tryExtractAmount(line) {
     }
   }
 
+  // Compact multi-digit break form: 0123456789br500 / 0br500.
+  // Handle this before the generic R+amount matcher so the "r" in "br"
+  // is not mistaken for a reverse marker.
+  let breakAmount = value.match(
+    /^([0-9]+)\s*(ဘရိတ်|br|bk|break|brake|b)\s*([\d,]+)$/iu
+  );
+
+  if (breakAmount) {
+    return validateExtractedAmount(
+      `${breakAmount[1]} ${breakAmount[2]}`,
+      breakAmount[3]
+    );
+  }
+
   let match = value.match(
-    /^(.+?)([Rr®Ⓡ])\s*([\d,]+)$/u
+    /^(.+?)(?<![A-Za-z])([Rr®Ⓡ])\s*([\d,]+)$/u
   );
 
   if (match) {
@@ -839,7 +870,7 @@ function isRecognizedAttachedExpression(
     return true;
   }
 
-  if (/^(?:(?:အပူးစုံ|ပူးစုံ|စုံစုံ|မစုံ|စုံမ|မစ|စမ|မမ|စုံပူး|မပူး|ပါဝါ|နက္ခတ်|နခတ်|အပူး|ပူး)[Rr®Ⓡ]?)+$/u.test(compact)) {
+  if (/^(?:(?:အပူးစုံ|ပူးစုံ|စုံစုံ|မစုံ|စုံမ|မစ|စမ|မမ|စုံပူး|မပူး|ပါဝါ|ညီကို|နက္ခတ်|နခတ်|အပူး|ပူး)[Rr®Ⓡ]?)+$/u.test(compact)) {
     return true;
   }
 
@@ -852,7 +883,7 @@ function isRecognizedAttachedExpression(
   }
 
   if (
-    /^\d(ဘရိတ်|b|br|bk|break|brake)(?:ပါ)?$/iu
+    /^\d+(ဘရိတ်|b|br|bk|break|brake)(?:ပါ)?$/iu
       .test(compact)
   ) {
     return true;
@@ -876,12 +907,12 @@ function isRecognizedAttachedExpression(
     return true;
   }
 
-  if (/^\d{1,9}(?:ထိပ်\/?ပိတ်)(?:အပူး)?(?:ပါ)?$/u.test(compact)) {
+  if (/^\d{1,10}(?:ထိပ်\/?ပိတ်)(?:အပူး)?(?:ပါ)?$/u.test(compact)) {
     return true;
   }
 
   if (
-    /^\d{1,9}[./_-]\d{1,9}(?:ကပ်|cp)$/iu
+    /^\d{1,10}[./_-]\d{1,10}(?:ကပ်|cp)$/iu
       .test(compact)
   ) {
     return true;
@@ -949,6 +980,10 @@ function detectCarryAmount(lines) {
 function isIgnorableLabel(line) {
   const value = String(line || "").trim();
 
+  // Standalone app/label lines, including Burmese and labels followed by 0-12.
+  if (/^[A-Za-z\u1000-\u109F][A-Za-z\u1000-\u109F _-]{0,30}(?:\s*(?:[0-9]|1[0-2]))?$/u.test(value)) {
+    return true;
+  }
   if (!/^[A-Za-z][A-Za-z _-]{0,30}$/.test(value)) {
     return false;
   }
@@ -970,6 +1005,8 @@ function isIgnorableLabel(line) {
 function cleanExpression(value) {
   return String(value || "")
     .replace(/\u00a0/g, " ")
+    .replace(/(ထိပ်)\s*[-:/.]\s*(ပိတ်)/gu, "$1/$2")
+    .replace(/(ပါဝါ|နခတ်|နက္ခတ်|ညီကို|စုံမ|မစုံ|စုံစုံ|မမ|အပူး|ပူး)\s*[/,:-]\s*(?=(ပါဝါ|နခတ်|နက္ခတ်|ညီကို|စုံမ|မစုံ|စုံစုံ|မမ|အပူး|ပူး))/gu, "$1")
     .replace(/[၊]/g, ",")
     .replace(/\s+/g, " ")
     .trim();
@@ -1177,7 +1214,7 @@ function normalizeMessage(text) {
     "$1$2\n"
   );
   value = value.replace(
-    /(\d{1,9}(?:ထိပ်\/?ပိတ်|ထိပ်|ပိတ်)(?:အပူး)?(?:ပါ)?)\s*([\d,]{3,}?)(?=\d{1,9}(?:ထိပ်\/?ပိတ်|ထိပ်|ပိတ်))/giu,
+    /(\d{1,10}(?:ထိပ်\/?ပိတ်|ထိပ်|ပိတ်)(?:အပူး)?(?:ပါ)?)\s*([\d,]{3,}?)(?=\d{1,10}(?:ထိပ်\/?ပိတ်|ထိပ်|ပိတ်))/giu,
     "$1$2\n"
   );
 
@@ -1196,7 +1233,7 @@ function normalizeMessage(text) {
   // Fixed Rule amount ပြီးနောက် နောက် Fixed Rule record ဆက်လာလျှင် ခွဲမည်။
   // ဥပမာ - စုံစုံ®500မမ®500စမ®500မစ®500
   value = value.replace(
-    /([R®]\s*[\d,]+)\s*(?=(?:အပူးစုံ|ပူးစုံ|စုံစုံ|မစုံ|စုံမ|မစ|စမ|မမ|စုံပူး|မပူး|ပါဝါ|နက္ခတ်|နခတ်|အပူး|ပူး)(?:R|r|®|Ⓡ)?)/giu,
+    /([R®]\s*[\d,]+)\s*(?=(?:အပူးစုံ|ပူးစုံ|စုံစုံ|မစုံ|စုံမ|မစ|စမ|မမ|စုံပူး|မပူး|ပါဝါ|ညီကို|နက္ခတ်|နခတ်|အပူး|ပူး)(?:R|r|®|Ⓡ)?)/giu,
     "$1\n"
   );
 

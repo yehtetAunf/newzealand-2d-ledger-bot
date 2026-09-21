@@ -119,7 +119,21 @@ function parseBetExpression(
   amount,
   originalLabel
 ) {
-  const expression = cleanExpression(rawExpression);
+  let expression = cleanExpression(rawExpression);
+
+  // When R/r/® is used immediately before the amount (e.g.
+  // "03 05 08r500"), it denotes reverse betting for the whole
+  // listed group. Normalize an attached R/r to the separated form
+  // so the direct-list parser expands every number and its reverse,
+  // rather than reversing only the final number.
+  if (
+    /[Rr]$/u.test(expression) &&
+    /[Rr®Ⓡ]\s*[\d,]+$/u.test(String(originalLabel || "")) &&
+    /\d{2}/u.test(expression) &&
+    (expression.match(/\d{2}/g) || []).length > 1
+  ) {
+    expression = expression.replace(/[Rr]$/u, " R");
+  }
 
   if (!expression) {
     throw new Error("ဂဏန်း သို့မဟုတ် Rule မတွေ့ပါ။");

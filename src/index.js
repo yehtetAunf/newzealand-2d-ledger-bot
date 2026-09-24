@@ -567,6 +567,13 @@ Report အမျိုးအစား: all, top, below, above, untouched`);
           return new Response("OK");
         }
 
+        if (text === "/allnumbers") {
+          await handlePrivateGroupReport(env, {
+            groupId: chatId, userId, isGroup, type: "all"
+          });
+          return new Response("OK");
+        }
+
         if (text === "/untouched") {
           await handlePrivateGroupReport(env, {
             groupId: chatId, userId, isGroup, type: "untouched"
@@ -1874,6 +1881,7 @@ function groupAdminMainKeyboard(selective = false, canSeeReports = false) {
     keyboard.splice(3, 0,
       ["🏆 အများဆုံးဂဏန်း"],
       ["📉 ၅,၀၀၀ အောက်", "📈 ၁၀,၀၀၀ အထက်"],
+      ["🔢 ဂဏန်းအကုန်ကြည့်ရန်"],
       ["🎯 မထိုးရသေးသောဂဏန်း"]
     );
   }
@@ -1930,6 +1938,7 @@ function mapGroupAdminButtonToCommand(text) {
     "🏆 အများဆုံးဂဏန်း": "/top",
     "📉 ၅,၀၀၀ အောက်": "/below 5000",
     "📈 ၁၀,၀၀၀ အထက်": "/above 10000",
+    "🔢 ဂဏန်းအကုန်ကြည့်ရန်": "/allnumbers",
     "🎯 မထိုးရသေးသောဂဏန်း": "/untouched"
   };
   return commands[text] || text;
@@ -2633,10 +2642,12 @@ async function sendPrivateNotice(env, userId, sourceChatId, text) {
 }
 
 async function sendPrivateReportMenu(env, groupId, userId) {
-  const types = ["top", "below", "above", "untouched"];
+  const types = ["top", "below", "above", "all", "untouched"];
   const allowed = [];
   for (const type of types) {
-    if (isOwner(userId, env) || await hasReportPermission(env.DB, groupId, userId, type)) {
+    if (type === "all"
+      ? (isOwner(userId, env) || await hasAnyReportPermission(env.DB, groupId, userId))
+      : (isOwner(userId, env) || await hasReportPermission(env.DB, groupId, userId, type))) {
       allowed.push(type);
     }
   }
@@ -2655,6 +2666,7 @@ async function sendPrivateReportMenu(env, groupId, userId) {
     top: "🏆 အများဆုံးဂဏန်း",
     below: "📉 ၅,၀၀၀ အောက်",
     above: "📈 ၁၀,၀၀၀ အထက်",
+    all: "🔢 ဂဏန်းအကုန်ကြည့်ရန်",
     untouched: "🎯 မထိုးရသေး"
   };
   const buttons = allowed.map((type) => [{
@@ -2694,8 +2706,9 @@ async function handlePrivateGroupReport(
     return;
   }
 
-  const allowed = isOwner(userId, env) ||
-    await hasReportPermission(env.DB, groupId, userId, type);
+  const allowed = type === "all"
+    ? (isOwner(userId, env) || await hasAnyReportPermission(env.DB, groupId, userId))
+    : (isOwner(userId, env) || await hasReportPermission(env.DB, groupId, userId, type));
 
   if (!allowed) {
     await sendPrivateNotice(
@@ -2722,6 +2735,14 @@ ${rows.map((row) => row.number).join(" ")}`
       ? `🏆 အများဆုံး ${limit} ဂဏန်း
 ━━━━━━━━━━━━━━━━━━
 ${rows.map((row, index) => `${index + 1}. ${row.number} = ${formatMoney(row.total_amount)}`).join("\n")}`
+      : "📭 ထိုးထားသောဂဏန်း မရှိသေးပါ။";
+  } else if (type === "all") {
+    const rows = (await getNumberTotals(env.DB, groupId))
+      .filter((row) => Number(row?.total_amount) > 0);
+    msg = rows.length
+      ? `🔢 ဂဏန်းအကုန်
+━━━━━━━━━━━━━━━━━━
+${rows.map((row) => `${row.number} = ${formatMoney(row.total_amount)}`).join("\n")}`
       : "📭 ထိုးထားသောဂဏန်း မရှိသေးပါ။";
   } else if (type === "below") {
     const value = amount === null ? 5000 : amount;

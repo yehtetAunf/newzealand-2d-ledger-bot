@@ -2738,11 +2738,22 @@ ${rows.map((row, index) => `${index + 1}. ${row.number} = ${formatMoney(row.tota
       : "📭 ထိုးထားသောဂဏန်း မရှိသေးပါ။";
   } else if (type === "all") {
     const rows = (await getNumberTotals(env.DB, groupId))
-      .filter((row) => Number(row?.total_amount) > 0);
+      .filter((row) => Number(row?.total_amount) > 0)
+      .sort((a, b) => Number(a.total_amount) - Number(b.total_amount) || String(a.number).localeCompare(String(b.number)));
+
+    const groups = [];
+    for (const row of rows) {
+      const amountKey = Number(row.total_amount);
+      let group = groups.find((g) => g.amount === amountKey);
+      if (!group) {
+        group = { amount: amountKey, numbers: [] };
+        groups.push(group);
+      }
+      group.numbers.push(row.number);
+    }
+
     msg = rows.length
-      ? `🔢 ဂဏန်းအကုန်
-━━━━━━━━━━━━━━━━━━
-${rows.map((row) => `${row.number} = ${formatMoney(row.total_amount)}`).join("\n")}`
+      ? `🔢 ဂဏန်းအကုန်\n━━━━━━━━━━━━━━━━━━\n${groups.map((g) => `💰 ${formatMoney(g.amount)}\n${g.numbers.join("  ")}`).join("\n\n")}`
       : "📭 ထိုးထားသောဂဏန်း မရှိသေးပါ။";
   } else if (type === "below") {
     const value = amount === null ? 5000 : amount;

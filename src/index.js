@@ -478,8 +478,8 @@ Report အမျိုးအစား: all, top, below, above, untouched`);
 👤 User ID : ${targetUserId}
 ━━━━━━━━━━━━━━━━━━
 🏆 အများဆုံး : ${Number(row?.can_top) === 1 ? "✅" : "❌"}
-📉 ၅,၀၀၀ အောက် : ${Number(row?.can_below) === 1 ? "✅" : "❌"}
-📈 ၁၀,၀၀၀ အထက် : ${Number(row?.can_above) === 1 ? "✅" : "❌"}
+📉 ၁၅,၀၀၀ အောက် : ${Number(row?.can_below) === 1 ? "✅" : "❌"}
+📈 ၁၅,၀၀၀ အထက် : ${Number(row?.can_above) === 1 ? "✅" : "❌"}
 🎯 မထိုးရသေး : ${Number(row?.can_untouched) === 1 ? "✅" : "❌"}`);
             return new Response("OK");
           }
@@ -631,7 +631,7 @@ Report အမျိုးအစား: all, top, below, above, untouched`);
           const args = text.split(/\s+/);
           const amount = Number(String(args[1] || "").replace(/,/g, ""));
           if (args.length !== 2 || !Number.isFinite(amount) || amount < 0) {
-            await sendPrivateNotice(env, userId, chatId, "အသုံးပြုပုံ\n/below 5000");
+            await sendPrivateNotice(env, userId, chatId, "အသုံးပြုပုံ\n/below 15000");
             return new Response("OK");
           }
           await handlePrivateGroupReport(env, {
@@ -644,7 +644,7 @@ Report အမျိုးအစား: all, top, below, above, untouched`);
           const args = text.split(/\s+/);
           const amount = Number(String(args[1] || "").replace(/,/g, ""));
           if (args.length !== 2 || !Number.isFinite(amount) || amount < 0) {
-            await sendPrivateNotice(env, userId, chatId, "အသုံးပြုပုံ\n/above 10000");
+            await sendPrivateNotice(env, userId, chatId, "အသုံးပြုပုံ\n/above 15000");
             return new Response("OK");
           }
           await handlePrivateGroupReport(env, {
@@ -1277,8 +1277,8 @@ Admin ထံ အသုံးပြုခွင့်တောင်းပါ။`
 /top
 /top 20
 /number 67
-/below 5000
-/above 10000
+/below 15000
+/above 15000
 /mysales`
           );
           return new Response("OK");
@@ -1880,7 +1880,7 @@ function groupAdminMainKeyboard(selective = false, canSeeReports = false) {
   if (canSeeReports) {
     keyboard.splice(3, 0,
       ["🏆 အများဆုံးဂဏန်း"],
-      ["📉 ၅,၀၀၀ အောက်", "📈 ၁၀,၀၀၀ အထက်"],
+      ["📉 ၁၅,၀၀၀ အောက်", "📈 ၁၅,၀၀၀ အထက်"],
       ["🔢 ဂဏန်းအကုန်ကြည့်ရန်"],
       ["🎯 မထိုးရသေးသောဂဏန်း"]
     );
@@ -1936,8 +1936,8 @@ function mapGroupAdminButtonToCommand(text) {
   const commands = {
     "💰 စုစုပေါင်းအရောင်း": "/sales",
     "🏆 အများဆုံးဂဏန်း": "/top",
-    "📉 ၅,၀၀၀ အောက်": "/below 5000",
-    "📈 ၁၀,၀၀၀ အထက်": "/above 10000",
+    "📉 ၁၅,၀၀၀ အောက်": "/below 15000",
+    "📈 ၁၅,၀၀၀ အထက်": "/above 15000",
     "🔢 ဂဏန်းအကုန်ကြည့်ရန်": "/allnumbers",
     "🎯 မထိုးရသေးသောဂဏန်း": "/untouched"
   };
@@ -2061,8 +2061,8 @@ async function handleAdminKeyboard(env, chatId, text) {
     "🚫 အသုံးပြုခွင့်ပိတ်ရန်": "ပိတ်မယ့် User ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/ban USER_ID",
     "🔓 အသုံးပြုခွင့်ပြန်ဖွင့်ရန်": "ပြန်ဖွင့်မယ့် User ID ကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/unban USER_ID",
     "🔢 ဂဏန်းရှာရန်": "စစ်မယ့်ဂဏန်းကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/number 67",
-    "📉 သတ်မှတ်ငွေအောက်": "ငွေပမာဏကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/below 5000",
-    "📈 သတ်မှတ်ငွေအထက်": "ငွေပမာဏကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/above 10000"
+    "📉 သတ်မှတ်ငွေအောက်": "ငွေပမာဏကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/below 15000",
+    "📈 သတ်မှတ်ငွေအထက်": "ငွေပမာဏကို ဒီပုံစံနဲ့ပို့ပါ။\n\n/above 15000"
   };
 
   if (text === "✅ အသုံးပြုခွင့်ပေးရန်") {
@@ -2202,10 +2202,10 @@ async function sendReportTypePicker(env, chatId, groupId, targetUserId, action) 
         [{ text: "✅ အားလုံး", callback_data: `rpm:t:${groupId}:${targetUserId}:${action}:all` }],
         [
           { text: "🏆 အများဆုံး", callback_data: `rpm:t:${groupId}:${targetUserId}:${action}:top` },
-          { text: "📉 ၅,၀၀၀ အောက်", callback_data: `rpm:t:${groupId}:${targetUserId}:${action}:below` }
+          { text: "📉 ၁၅,၀၀၀ အောက်", callback_data: `rpm:t:${groupId}:${targetUserId}:${action}:below` }
         ],
         [
-          { text: "📈 ၁၀,၀၀၀ အထက်", callback_data: `rpm:t:${groupId}:${targetUserId}:${action}:above` },
+          { text: "📈 ၁၅,၀၀၀ အထက်", callback_data: `rpm:t:${groupId}:${targetUserId}:${action}:above` },
           { text: "🎯 မထိုးရသေး", callback_data: `rpm:t:${groupId}:${targetUserId}:${action}:untouched` }
         ]
       ]
@@ -2222,8 +2222,8 @@ async function sendReportPermissionStatus(env, chatId, groupId, targetUserId) {
 👤 User ID : ${targetUserId}
 ━━━━━━━━━━━━━━━━━━
 🏆 အများဆုံး : ${Number(row?.can_top) === 1 ? "✅" : "❌"}
-📉 ၅,၀၀၀ အောက် : ${Number(row?.can_below) === 1 ? "✅" : "❌"}
-📈 ၁၀,၀၀၀ အထက် : ${Number(row?.can_above) === 1 ? "✅" : "❌"}
+📉 ၁၅,၀၀၀ အောက် : ${Number(row?.can_below) === 1 ? "✅" : "❌"}
+📈 ၁၅,၀၀၀ အထက် : ${Number(row?.can_above) === 1 ? "✅" : "❌"}
 🎯 မထိုးရသေး : ${Number(row?.can_untouched) === 1 ? "✅" : "❌"}`);
 }
 
@@ -2664,8 +2664,8 @@ async function sendPrivateReportMenu(env, groupId, userId) {
 
   const labels = {
     top: "🏆 အများဆုံးဂဏန်း",
-    below: "📉 ၅,၀၀၀ အောက်",
-    above: "📈 ၁၀,၀၀၀ အထက်",
+    below: "📉 ၁၅,၀၀၀ အောက်",
+    above: "📈 ၁၅,၀၀၀ အထက်",
     all: "🔢 ဂဏန်းအကုန်ကြည့်ရန်",
     untouched: "🎯 မထိုးရသေး"
   };

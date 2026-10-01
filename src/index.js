@@ -1117,7 +1117,10 @@ Admin ထံ Group အသုံးပြုခွင့်တောင်းပ�
               return new Response("OK");
             }
 
-            const canSeeReports = isOwner(userId, env) ||
+            // Group Admin/Owner များသည် Group Report ခလုတ်များကို အလိုအလျောက် သုံးနိုင်မည်။
+            // Report Permission ကို သီးခြားပေးထားသော User များလည်း ဆက်လက်အသုံးပြုနိုင်မည်။
+            const canSeeReports = canManageGroupLedger ||
+              isOwner(userId, env) ||
               await hasAnyReportPermission(env.DB, chatId, userId);
             const keyboard = canManageGroupLedger
               ? groupAdminMainKeyboard(false, canSeeReports)
@@ -1900,7 +1903,11 @@ async function handleGroupAdminKeyboard(env, chatId, userId, text) {
       env.BOT_TOKEN,
       chatId,
       "👑 အုပ်စုစီမံသူ ပင်မစာမျက်နှာ",
-      groupAdminMainKeyboard(false, isOwner(userId, env) || await hasAnyReportPermission(env.DB, chatId, userId))
+      groupAdminMainKeyboard(false,
+        isOwner(userId, env) ||
+        await isTelegramGroupAdmin(env.BOT_TOKEN, chatId, userId) ||
+        await hasAnyReportPermission(env.DB, chatId, userId)
+      )
     );
     return true;
   }
@@ -2706,9 +2713,15 @@ async function handlePrivateGroupReport(
     return;
   }
 
-  const allowed = type === "all"
+  // Group Admin/Owner များကို Report Permission သီးခြားမပေးဘဲ
+  // Telegram Group Admin status နဲ့ တိုက်ရိုက် ခွင့်ပြုမည်။
+  const groupAdmin = isGroup
+    ? await isTelegramGroupAdmin(env.BOT_TOKEN, groupId, userId)
+    : false;
+
+  const allowed = groupAdmin || (type === "all"
     ? (isOwner(userId, env) || await hasAnyReportPermission(env.DB, groupId, userId))
-    : (isOwner(userId, env) || await hasReportPermission(env.DB, groupId, userId, type));
+    : (isOwner(userId, env) || await hasReportPermission(env.DB, groupId, userId, type)));
 
   if (!allowed) {
     await sendPrivateNotice(

@@ -57,7 +57,7 @@ export default {
           env.BOT_NAME ||
           "New Zealand 2D Ledger Bot",
         status: "running",
-        version: "5.1.9"
+        version: "5.2.0"
       });
     }
 
@@ -88,7 +88,12 @@ export default {
         const groupAdmin = isGroup
           ? await isTelegramGroupAdmin(env.BOT_TOKEN, chatId, userId)
           : false;
-        const canManageGroupLedger = admin || groupAdmin;
+        // Bot ကို Group Admin ခန့်ထားပြီးသားဆိုရင် Group ထဲက မည်သူမဆို
+        // Bot ခလုတ်/Report/Ledger action များကို အသုံးပြုနိုင်သည်။
+        const botGroupAdmin = isGroup
+          ? await isBotGroupAdmin(env.BOT_TOKEN, chatId)
+          : false;
+        const canManageGroupLedger = admin || groupAdmin || botGroupAdmin;
         const originalText = String(
           message.text || ""
         ).trim();
@@ -168,7 +173,13 @@ export default {
         }
 
         // Group Owner/Admin အတွက် အုပ်စုစီမံ Menu ပြမယ်။
-        if (isGroup && canManageGroupLedger) {
+        if (isGroup && botGroupAdmin) {
+          const groupMenuHandled = await handleGroupAdminKeyboard(env, chatId, userId, text);
+          if (groupMenuHandled) return new Response("OK");
+          text = mapGroupAdminButtonToCommand(text);
+        } else if (isGroup && groupAdmin) {
+          // Bot ကို Admin မပေးထားသေးရင် Group Admin ကိုယ်တိုင်အတွက်သာ
+          // အရင် Group-Admin ခလုတ် logic ကို ဆက်ထားမည်။
           const groupMenuHandled = await handleGroupAdminKeyboard(env, chatId, userId, text);
           if (groupMenuHandled) return new Response("OK");
           text = mapGroupAdminButtonToCommand(text);
@@ -1117,11 +1128,15 @@ Admin ထံ Group အသုံးပြုခွင့်တောင်းပ�
               return new Response("OK");
             }
 
-            const canSeeReports = canManageGroupLedger ||
+            // Group Admin / Owner များသည် Report Permission သီးခြားမလိုဘဲ
+            // မိမိ Group ၏ Report ခလုတ်အားလုံးကို အသုံးပြုနိုင်သည်။
+            // Bot ကို Group Admin ခန့်ထားရင် Group ထဲက မည်သူမဆို
+            // Admin-style Bot ခလုတ်များကို မြင်ပြီး အသုံးပြုနိုင်သည်။
+            const canSeeReports = botGroupAdmin || canManageGroupLedger ||
               isOwner(userId, env) ||
               await hasAnyReportPermission(env.DB, chatId, userId);
-            const keyboard = canManageGroupLedger
-              ? groupAdminMainKeyboard(false, canSeeReports)
+            const keyboard = botGroupAdmin || canManageGroupLedger
+              ? groupAdminMainKeyboard(false, true)
               : userMainKeyboard(false, canSeeReports);
             await sendMessage(
               env.BOT_TOKEN,
@@ -1850,7 +1865,7 @@ async function handleUserKeyboard(env, chatId, userId, isGroup, text) {
       "🏠 အသုံးပြုသူပင်မစာမျက်နှာ",
       userMainKeyboard(
         false,
-        isGroup && (canManageGroupLedger || isOwner(userId, env) || await hasAnyReportPermission(env.DB, chatId, userId))
+        isGroup && (isOwner(userId, env) || await hasAnyReportPermission(env.DB, chatId, userId))
       )
     );
     return true;
@@ -2369,7 +2384,9 @@ async function handleAdminCallback(env, callbackQuery) {
       return;
     }
 
-    const canSee = await canAccessGroupReports(env, groupId, fromId, "all");
+    const canSee = isOwner(fromId, env) ||
+      await isTelegramGroupAdmin(env.BOT_TOKEN, groupId, fromId) ||
+      await hasAnyReportPermission(env.DB, groupId, fromId);
     if (!canSee) {
       await answerCallbackQuery(env.BOT_TOKEN, callbackId, "ဒီ Group အတွက် Report ခွင့်မရှိပါ။", true);
       return;
@@ -2641,27 +2658,13 @@ async function sendPrivateNotice(env, userId, sourceChatId, text) {
   }
 }
 
-async function canAccessGroupReports(env, groupId, userId, type = "all") {
-  // Telegram Group Admin/Owner can use all Report buttons without a separate DB grant.
-  if (isOwner(userId, env)) return true;
-
-  try {
-    if (await isTelegramGroupAdmin(env.BOT_TOKEN, groupId, userId)) return true;
-  } catch (error) {
-    console.error("Group report admin check failed:", error);
-  }
-
-  if (type === "all") {
-    return await hasAnyReportPermission(env.DB, groupId, userId);
-  }
-  return await hasReportPermission(env.DB, groupId, userId, type);
-}
-
 async function sendPrivateReportMenu(env, groupId, userId) {
   const types = ["top", "below", "above", "all", "untouched"];
   const allowed = [];
   for (const type of types) {
-    if (await canAccessGroupReports(env, groupId, userId, type)) {
+    if (type === "all"
+      ? (isOwner(userId, env) || await hasAnyReportPermission(env.DB, groupId, userId))
+      : (isOwner(userId, env) || await hasReportPermission(env.DB, groupId, userId, type))) {
       allowed.push(type);
     }
   }
@@ -2720,7 +2723,18 @@ async function handlePrivateGroupReport(
     return;
   }
 
-  const allowed = await canAccessGroupReports(env, groupId, userId, type);
+  const groupAdmin = isGroup
+    ? await isTelegramGroupAdmin(env.BOT_TOKEN, groupId, userId)
+    : false;
+  const botGroupAdmin = isGroup
+    ? await isBotGroupAdmin(env.BOT_TOKEN, groupId)
+    : false;
+
+  // Bot ကို Group Admin ခန့်ထားရင် Group ထဲက မည်သူမဆို Report အားလုံးကို ကြည့်နိုင်သည်။
+  // Bot Admin မဖြစ်သေးရင် အရင် Group Admin / explicit permission logic ကို အသုံးပြုမည်။
+  const allowed = botGroupAdmin || groupAdmin || (type === "all"
+    ? (isOwner(userId, env) || await hasAnyReportPermission(env.DB, groupId, userId))
+    : (isOwner(userId, env) || await hasReportPermission(env.DB, groupId, userId, type)));
 
   if (!allowed) {
     await sendPrivateNotice(
@@ -2884,6 +2898,27 @@ async function sendTestGroupJoinPrompt(env, chatId) {
 Group ဝင်ပြီးနောက် “✅ Group ဝင်ပြီးပါပြီ” ကို နှိပ်၍ စစ်ဆေးပါ။`,
     await buildTestGroupJoinKeyboard(env)
   );
+}
+
+async function isBotGroupAdmin(token, chatId) {
+  try {
+    const meResponse = await fetch(
+      `https://api.telegram.org/bot${token}/getMe`
+    );
+    const meData = await meResponse.json();
+    if (!meData.ok || !meData.result?.id) return false;
+
+    const response = await fetch(
+      `https://api.telegram.org/bot${token}/getChatMember?chat_id=${encodeURIComponent(chatId)}&user_id=${encodeURIComponent(meData.result.id)}`
+    );
+    const data = await response.json();
+    if (!data.ok || !data.result) return false;
+
+    return data.result.status === "creator" || data.result.status === "administrator";
+  } catch (error) {
+    console.error("Bot group admin check failed:", error);
+    return false;
+  }
 }
 
 async function isTelegramGroupAdmin(token, chatId, userId) {

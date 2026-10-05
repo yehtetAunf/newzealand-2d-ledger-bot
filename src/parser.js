@@ -380,18 +380,27 @@ function parseParityBreakRule(expression, amount, label) {
 }
 
 function parseBreakRule(expression, amount, label) {
-  const match = expression.match(
-    /^([0-9]+)\s*(ဘရိတ်|b|br|bk|break|brake)\s*(?:ပါ)?$/i
+  const compact = String(expression || "")
+    .replace(/\s+/g, "")
+    .replace(/[–—−]/g, "-");
+
+  // ဘရိတ်/br/bk/ဘရိတ် ကို separator အမျိုးမျိုးကြားက digit အုပ်စုနဲ့
+  // တွဲရေးထားနိုင်သည်။ ဥပမာ 1:7-8./5br, 1/7/8/5bk.
+  const match = compact.match(
+    /^([0-9][0-9:.,\/\-_]*)?(ဘရိတ်|b|br|bk|break|brake)(?:ပါ)?$/iu
   );
 
   if (!match || !isBreakKeyword(match[2])) {
     return null;
   }
 
-  // Allow a compact digit group such as 0123456789br500.
-  // Each digit expands to its own break set, then the sets are merged
-  // while preserving order and removing duplicate 2D numbers.
-  const digits = [...match[1]];
+  const rawDigits = String(match[1] || "");
+  const digits = rawDigits.match(/[0-9]/g) || [];
+  if (digits.length === 0) return null;
+
+  // Each written digit is an "အလို့". Keep the rule's existing
+  // 10-number expansion for each digit, but remove duplicate 2D values
+  // only when the same value is produced by multiple selected digits.
   const seen = new Set();
   const numbers = [];
 
@@ -405,7 +414,7 @@ function parseBreakRule(expression, amount, label) {
   }
 
   return createBetItem({
-    label: `${match[1]} ဘရိတ်`,
+    label: `${rawDigits.replace(/[.:\/\-_]+/g, ":")} ဘရိတ်`,
     rule: "ဘရိတ်",
     numbers,
     count: numbers.length,

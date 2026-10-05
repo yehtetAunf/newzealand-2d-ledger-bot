@@ -380,27 +380,20 @@ function parseParityBreakRule(expression, amount, label) {
 }
 
 function parseBreakRule(expression, amount, label) {
-  const compact = String(expression || "")
-    .replace(/\s+/g, "")
-    .replace(/[–—−]/g, "-");
-
-  // ဘရိတ်/br/bk/ဘရိတ် ကို separator အမျိုးမျိုးကြားက digit အုပ်စုနဲ့
-  // တွဲရေးထားနိုင်သည်။ ဥပမာ 1:7-8./5br, 1/7/8/5bk.
-  const match = compact.match(
-    /^([0-9][0-9:.,\/\-_]*)?(ဘရိတ်|b|br|bk|break|brake)(?:ပါ)?$/iu
+  const match = expression.match(
+    /^([0-9]+(?:\s*[:.\/,*-]+\s*[0-9]+)*)\s*(ဘရိတ်|b|br|bk|break|brake)\s*(?:ပါ)?$/i
   );
 
   if (!match || !isBreakKeyword(match[2])) {
     return null;
   }
 
-  const rawDigits = String(match[1] || "");
-  const digits = rawDigits.match(/[0-9]/g) || [];
-  if (digits.length === 0) return null;
-
-  // Each written digit is an "အလို့". Keep the rule's existing
-  // 10-number expansion for each digit, but remove duplicate 2D values
-  // only when the same value is produced by multiple selected digits.
+  // Accept both compact groups (0123456789br500) and individually
+  // separated digits (1/5/6/8ဘရိတ်500, 6-7-8-9br500,
+  // 1:3:5:6bk500, 5.7.8.0br500, 4*6*7*0ဘရိတ်500).
+  // Every digit is expanded through its own break set, then duplicate
+  // 2D numbers are removed while preserving order.
+  const digits = (match[1].match(/[0-9]/g) || []);
   const seen = new Set();
   const numbers = [];
 
@@ -414,7 +407,7 @@ function parseBreakRule(expression, amount, label) {
   }
 
   return createBetItem({
-    label: `${rawDigits.replace(/[.:\/\-_]+/g, ":")} ဘရိတ်`,
+    label: `${match[1]} ဘရိတ်`,
     rule: "ဘရိတ်",
     numbers,
     count: numbers.length,
@@ -792,7 +785,7 @@ function tryExtractAmount(line) {
   // Handle this before the generic R+amount matcher so the "r" in "br"
   // is not mistaken for a reverse marker.
   let breakAmount = value.match(
-    /^([0-9]+)\s*(ဘရိတ်|br|bk|break|brake|b)\s*([\d,]+)$/iu
+    /^([0-9]+(?:\s*[:.\/,*-]+\s*[0-9]+)*)\s*(ဘရိတ်|br|bk|break|brake|b)\s*([\d,]+)$/iu
   );
 
   if (breakAmount) {
